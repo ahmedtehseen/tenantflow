@@ -1,0 +1,35 @@
+import "server-only";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
+
+/**
+ * Supabase client for Server Components, Server Functions and Route Handlers.
+ *
+ * Note: with Cache Components enabled, calling this from a Server Component
+ * reads `cookies()`, so the caller must render inside a <Suspense> boundary.
+ */
+export async function createClient() {
+  const cookieStore = await cookies();
+
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options),
+            );
+          } catch {
+            // `set` throws when called from a Server Component. This is safe to
+            // ignore because the proxy (src/proxy.ts) refreshes sessions.
+          }
+        },
+      },
+    },
+  );
+}
