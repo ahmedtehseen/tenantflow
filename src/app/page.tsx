@@ -1,69 +1,147 @@
-import Image from "next/image";
+import { Suspense } from "react";
+import Link from "next/link";
+import { Workflow, LogIn, UserPlus, Building, ShieldCheck, LogOut } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+
+async function signOut() {
+  "use server";
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  revalidatePath("/", "layout");
+  redirect("/");
+}
+
+async function UserStatus() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return (
+      <div className="flex items-center gap-3">
+        <Link
+          href="/login"
+          className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-sm font-medium text-zinc-800 shadow-xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+        >
+          <LogIn className="size-4" />
+          Sign in
+        </Link>
+        <Link
+          href="/signup"
+          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-sm font-medium text-white shadow-xs hover:bg-indigo-500 transition-colors"
+        >
+          <UserPlus className="size-4" />
+          Create account
+        </Link>
+      </div>
+    );
+  }
+
+  // Fetch user profile & tenant memberships
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+
+  const { data: memberships } = await supabase
+    .from("organization_members")
+    .select("role, organizations(id, name, slug)")
+    .eq("user_id", user.id);
+
+  return (
+    <div className="flex flex-col gap-6 w-full max-w-xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex items-center justify-between border-b border-zinc-100 pb-4 dark:border-zinc-800">
+        <div>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+            <span className="size-1.5 rounded-full bg-emerald-500" />
+            Authenticated
+          </span>
+          <h2 className="mt-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+            {profile?.full_name || user.email}
+          </h2>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 font-mono">
+            {user.email} &middot; ID: {user.id.slice(0, 8)}...
+          </p>
+        </div>
+        <form action={signOut}>
+          <button
+            type="submit"
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+          >
+            <LogOut className="size-3.5" />
+            Sign out
+          </button>
+        </form>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+          Your Organizations
+        </h3>
+        {memberships && memberships.length > 0 ? (
+          <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-100 dark:divide-zinc-800 dark:border-zinc-800">
+            {memberships.map((m, idx) => {
+              const org = Array.isArray(m.organizations) ? m.organizations[0] : m.organizations;
+              return (
+                <li key={idx} className="flex items-center justify-between p-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Building className="size-4 text-zinc-400" />
+                    <span className="font-medium text-zinc-800 dark:text-zinc-200">
+                      {org?.name ?? "Unknown"}
+                    </span>
+                    <span className="font-mono text-xs text-zinc-400">({org?.slug})</span>
+                  </div>
+                  <span className="rounded bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
+                    {m.role}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="rounded-lg border border-dashed border-zinc-200 p-4 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
+            No organization memberships yet.
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-lg bg-zinc-50 p-3 text-xs text-zinc-500 dark:bg-zinc-950 dark:text-zinc-400 flex items-start gap-2">
+        <ShieldCheck className="size-4 text-emerald-600 mt-0.5 shrink-0" />
+        <span>
+          Multi-tenant Row Level Security (RLS) is active. All database queries are automatically isolated to your tenant memberships.
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="flex min-h-full flex-1 flex-col items-center justify-center bg-zinc-50 px-4 py-16 dark:bg-zinc-950">
+      <div className="flex flex-col items-center text-center max-w-xl mb-8">
+        <div className="flex size-12 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md mb-4">
+          <Workflow className="size-6" />
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+        <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-4xl">
+          TenantFlow
+        </h1>
+        <p className="mt-2 text-base text-zinc-600 dark:text-zinc-400">
+          Production-grade multi-tenant B2B operations engine powered by Next.js 16 and Supabase.
+        </p>
+      </div>
+
+      {/* Dynamic session read inside Suspense boundary for Next.js 16 cache compliance */}
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center h-48 w-full max-w-xl rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 animate-pulse">
+            <span className="text-sm text-zinc-400">Loading session...</span>
+          </div>
+        }
+      >
+        <UserStatus />
+      </Suspense>
     </div>
   );
 }
