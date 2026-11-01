@@ -1,9 +1,8 @@
-import { notFound, redirect } from "next/navigation";
 import { Users, Shield } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantContext } from "@/lib/data/tenant";
 import { AddMemberForm } from "./_components/add-member-form";
 import { MemberRow } from "./_components/member-row";
-import type { OrgRole } from "@/types/database";
 
 interface MembersPageProps {
   params: Promise<{ slug: string }>;
@@ -13,41 +12,11 @@ export default async function MembersPage({ params }: MembersPageProps) {
   const { slug } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Instant in-memory cache hit from layout
+  const { user, currentOrg: org, currentRole } = await getTenantContext(slug);
+  const canAddMembers = currentRole === "owner" || currentRole === "admin";
 
-  if (!user) {
-    redirect(`/login?next=/org/${slug}/members`);
-  }
-
-  // 1. Fetch organization
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("id, name, slug")
-    .eq("slug", slug)
-    .maybeSingle();
-
-  if (!org) {
-    notFound();
-  }
-
-  // 2. Fetch caller's role
-  const { data: callerMember } = await supabase
-    .from("organization_members")
-    .select("role")
-    .eq("organization_id", org.id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!callerMember) {
-    notFound();
-  }
-
-  const callerRole = callerMember.role as OrgRole;
-  const canAddMembers = callerRole === "owner" || callerRole === "admin";
-
-  // 3. Fetch all organization members with profiles
+  // Fetch all organization members with profiles
   const { data: members } = await supabase
     .from("organization_members")
     .select(`
@@ -84,7 +53,7 @@ export default async function MembersPage({ params }: MembersPageProps) {
         <AddMemberForm
           orgId={org.id}
           orgSlug={org.slug}
-          callerRole={callerRole}
+          callerRole={currentRole}
         />
       )}
 
@@ -109,10 +78,10 @@ export default async function MembersPage({ params }: MembersPageProps) {
                 orgId={org.id}
                 orgSlug={org.slug}
                 callerUserId={user.id}
-                callerRole={callerRole}
+                callerRole={currentRole}
                 member={{
                   user_id: m.user_id,
-                  role: m.role as OrgRole,
+                  role: m.role,
                   created_at: m.created_at,
                   profile: profile ?? null,
                 }}
@@ -124,4 +93,3 @@ export default async function MembersPage({ params }: MembersPageProps) {
     </div>
   );
 }
-

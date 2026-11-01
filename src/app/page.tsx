@@ -108,6 +108,7 @@ async function UserStatus() {
                 <li key={idx}>
                   <Link
                     href={`/org/${org.slug}`}
+                    prefetch={true}
                     className="flex items-center justify-between p-3.5 text-sm hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 transition group rounded-lg"
                   >
                     <div className="flex items-center gap-2.5">

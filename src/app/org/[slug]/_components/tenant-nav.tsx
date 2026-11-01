@@ -56,6 +56,7 @@ export function TenantNav({ slug }: TenantNavProps) {
           <Link
             key={link.href}
             href={link.href}
+            prefetch={true}
             className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
               isActive
                 ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50"

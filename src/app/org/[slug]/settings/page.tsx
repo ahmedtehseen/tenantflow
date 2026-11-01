@@ -1,8 +1,6 @@
-import { notFound, redirect } from "next/navigation";
 import { Settings as SettingsIcon } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { getTenantContext } from "@/lib/data/tenant";
 import { SettingsForms } from "./_components/settings-forms";
-import type { OrgRole } from "@/types/database";
 
 interface SettingsPageProps {
   params: Promise<{ slug: string }>;
@@ -10,38 +8,9 @@ interface SettingsPageProps {
 
 export default async function SettingsPage({ params }: SettingsPageProps) {
   const { slug } = await params;
-  const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect(`/login?next=/org/${slug}/settings`);
-  }
-
-  // 1. Fetch organization
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("id, name, slug")
-    .eq("slug", slug)
-    .maybeSingle();
-
-  if (!org) {
-    notFound();
-  }
-
-  // 2. Fetch caller's role
-  const { data: callerMember } = await supabase
-    .from("organization_members")
-    .select("role")
-    .eq("organization_id", org.id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!callerMember) {
-    notFound();
-  }
+  // Instant in-memory cache hit from layout
+  const { currentOrg: org, currentRole } = await getTenantContext(slug);
 
   return (
     <div className="space-y-8">
@@ -59,9 +28,8 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
 
       <SettingsForms
         org={org}
-        callerRole={callerMember.role as OrgRole}
+        callerRole={currentRole}
       />
     </div>
   );
 }
-

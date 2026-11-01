@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import {
   Users,
   Ticket,
@@ -9,6 +8,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantContext } from "@/lib/data/tenant";
 
 interface TenantDashboardPageProps {
   params: Promise<{ slug: string }>;
@@ -20,32 +20,28 @@ export default async function TenantDashboardPage({
   const { slug } = await params;
   const supabase = await createClient();
 
-  // 1. Get current organization
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("id, name, slug, created_at, created_by")
-    .eq("slug", slug)
-    .maybeSingle();
+  // Instant in-memory cache hit from layout
+  const { currentOrg: org } = await getTenantContext(slug);
 
-  if (!org) {
-    notFound();
-  }
+  // Parallel database queries for dashboard metrics
+  const [membersResult, ticketsCountResult] = await Promise.all([
+    supabase
+      .from("organization_members")
+      .select("role, created_at, profiles(id, full_name, email)", {
+        count: "exact",
+      })
+      .eq("organization_id", org.id)
+      .order("created_at", { ascending: true })
+      .limit(5),
+    supabase
+      .from("tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", org.id),
+  ]);
 
-  // 2. Fetch members count & preview
-  const { data: members, count: memberCount } = await supabase
-    .from("organization_members")
-    .select("role, created_at, profiles(id, full_name, email)", {
-      count: "exact",
-    })
-    .eq("organization_id", org.id)
-    .order("created_at", { ascending: true })
-    .limit(5);
-
-  // 3. Fetch tickets count
-  const { count: ticketCount } = await supabase
-    .from("tickets")
-    .select("id", { count: "exact", head: true })
-    .eq("organization_id", org.id);
+  const members = membersResult.data || [];
+  const memberCount = membersResult.count ?? 0;
+  const ticketCount = ticketsCountResult.count ?? 0;
 
   const formattedDate = new Date(org.created_at).toLocaleDateString("en-US", {
     month: "short",
@@ -111,7 +107,7 @@ export default async function TenantDashboardPage({
           </div>
           <div className="mt-4 flex items-baseline justify-between">
             <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-50">
-              {memberCount ?? 0}
+              {memberCount}
             </span>
             <span className="flex items-center text-xs font-medium text-indigo-600 dark:text-indigo-400 group-hover:translate-x-0.5 transition-transform">
               View team <ArrowRight className="size-3.5 ml-1" />
@@ -134,7 +130,7 @@ export default async function TenantDashboardPage({
           </div>
           <div className="mt-4 flex items-baseline justify-between">
             <span className="text-3xl font-bold text-zinc-900 dark:text-zinc-50">
-              {ticketCount ?? 0}
+              {ticketCount}
             </span>
             <span className="flex items-center text-xs font-medium text-sky-600 dark:text-sky-400 group-hover:translate-x-0.5 transition-transform">
               View tickets <ArrowRight className="size-3.5 ml-1" />
@@ -179,13 +175,13 @@ export default async function TenantDashboardPage({
             href={`/org/${slug}/members`}
             className="text-xs font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400 flex items-center gap-1"
           >
-            Manage all ({memberCount ?? 0})
+            Manage all ({memberCount})
             <ArrowRight className="size-3.5" />
           </Link>
         </div>
 
         <ul className="mt-4 divide-y divide-zinc-100 dark:divide-zinc-800">
-          {members?.map((m, idx) => {
+          {members.map((m, idx) => {
             const profile = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
             const displayName = profile?.full_name || profile?.email || "Unknown Member";
             const initials = displayName

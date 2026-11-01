@@ -1,8 +1,8 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantContext } from "@/lib/data/tenant";
 import { TicketDetail } from "./ticket-detail";
 import type { MemberOption } from "../_components/ticket-list";
-import type { OrgRole } from "@/types/database";
 
 interface TicketDetailPageProps {
   params: Promise<{ slug: string; ticketId: string }>;
@@ -14,66 +14,40 @@ export default async function TicketDetailPage({
   const { slug, ticketId } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Instant in-memory cache hit from layout
+  const { user, currentOrg: org, currentRole } = await getTenantContext(slug);
 
-  if (!user) {
-    redirect(`/login?next=/org/${slug}/tickets/${ticketId}`);
-  }
+  // Parallel fetch: ticket and organization members
+  const [ticketResult, membersResult] = await Promise.all([
+    supabase
+      .from("tickets")
+      .select("*")
+      .eq("id", ticketId)
+      .eq("organization_id", org.id)
+      .maybeSingle(),
+    supabase
+      .from("organization_members")
+      .select(`
+        user_id,
+        profiles (
+          id,
+          full_name,
+          email
+        )
+      `)
+      .eq("organization_id", org.id),
+  ]);
 
-  // 1. Fetch organization
-  const { data: org } = await supabase
-    .from("organizations")
-    .select("id, name, slug")
-    .eq("slug", slug)
-    .maybeSingle();
-
-  if (!org) {
-    notFound();
-  }
-
-  // 2. Fetch caller membership
-  const { data: callerMember } = await supabase
-    .from("organization_members")
-    .select("role")
-    .eq("organization_id", org.id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!callerMember) {
-    notFound();
-  }
-
-  // 3. Fetch ticket
-  const { data: ticket } = await supabase
-    .from("tickets")
-    .select("*")
-    .eq("id", ticketId)
-    .eq("organization_id", org.id)
-    .maybeSingle();
-
+  const ticket = ticketResult.data;
   if (!ticket) {
     notFound();
   }
 
-  // 4. Fetch organization members
-  const { data: membersData } = await supabase
-    .from("organization_members")
-    .select(`
-      user_id,
-      profiles (
-        id,
-        full_name,
-        email
-      )
-    `)
-    .eq("organization_id", org.id);
-
+  const membersData = membersResult.data || [];
   const memberMap = new Map<string, { id: string; full_name: string | null; email: string }>();
   const memberOptions: MemberOption[] = [];
 
-  (membersData || []).forEach((m) => {
+  membersData.forEach((m) => {
     const profile = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
     if (profile) {
       const info = {
@@ -107,8 +81,7 @@ export default async function TicketDetailPage({
       orgId={org.id}
       orgSlug={org.slug}
       callerUserId={user.id}
-      callerRole={callerMember.role as OrgRole}
+      callerRole={currentRole}
     />
   );
 }
-

@@ -1,12 +1,11 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { Workflow, LogOut, ShieldAlert } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantContext } from "@/lib/data/tenant";
 import { TenantSwitcher } from "./_components/tenant-switcher";
 import { TenantNav } from "./_components/tenant-nav";
-import type { OrgRole } from "@/types/database";
 
 export const instant = false;
 
@@ -18,6 +17,8 @@ async function signOut() {
   redirect("/");
 }
 
+import { redirect } from "next/navigation";
+
 interface TenantLayoutProps {
   children: React.ReactNode;
   params: Promise<{ slug: string }>;
@@ -28,37 +29,12 @@ export default async function TenantLayout({
   params,
 }: TenantLayoutProps) {
   const { slug } = await params;
-  const supabase = await createClient();
 
-  // 1. Authenticate user
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Single request-memoized call: resolves user, memberships, current org & role
+  const { user, currentOrg, currentRole, organizations, profile } =
+    await getTenantContext(slug);
 
-  if (!user) {
-    redirect(`/login?next=/org/${slug}`);
-  }
-
-  // 2. Fetch current organization
-  const { data: currentOrg } = await supabase
-    .from("organizations")
-    .select("id, name, slug, created_by, created_at")
-    .eq("slug", slug)
-    .maybeSingle();
-
-  if (!currentOrg) {
-    notFound();
-  }
-
-  // 3. Verify user membership in this organization
-  const { data: currentMember } = await supabase
-    .from("organization_members")
-    .select("role")
-    .eq("organization_id", currentOrg.id)
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!currentMember) {
+  if (!currentRole) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 px-4 dark:bg-zinc-950">
         <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 text-center shadow-xs dark:border-red-900/50 dark:bg-zinc-900">
@@ -83,32 +59,6 @@ export default async function TenantLayout({
       </div>
     );
   }
-
-  // 4. Fetch all tenant organizations user has access to (for Tenant Switcher)
-  const { data: userMemberships } = await supabase
-    .from("organization_members")
-    .select("role, organizations(id, name, slug)")
-    .eq("user_id", user.id);
-
-  const organizations = (userMemberships || [])
-    .map((m) => {
-      const org = Array.isArray(m.organizations) ? m.organizations[0] : m.organizations;
-      if (!org) return null;
-      return {
-        id: org.id,
-        name: org.name,
-        slug: org.slug,
-        role: m.role as OrgRole,
-      };
-    })
-    .filter((org): org is { id: string; name: string; slug: string; role: OrgRole } => org !== null);
-
-  // 5. Fetch profile for top-right user menu
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, email")
-    .eq("id", user.id)
-    .single();
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950">
@@ -135,7 +85,7 @@ export default async function TenantLayout({
             {/* Tenant Switcher Dropdown */}
             <TenantSwitcher
               currentOrg={currentOrg}
-              currentRole={currentMember.role as OrgRole}
+              currentRole={currentRole}
               organizations={organizations}
             />
 
@@ -191,4 +141,3 @@ export default async function TenantLayout({
     </div>
   );
 }
-
