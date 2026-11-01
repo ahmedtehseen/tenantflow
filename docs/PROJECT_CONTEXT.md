@@ -55,7 +55,36 @@ Migration applied on remote project: `supabase/migrations/01_init_multi_tenancy.
 
 ---
 
-## 6. Supabase CLI & Migrations Workflow
+## 6. Organization Management & Multi-Tenant Routing
+- **Creation Flow:** `/org/new` powered by `createOrganizationAction`. Creates tenant in `public.organizations` with `created_by = auth.uid()`. Database trigger `handle_new_organization()` assigns creator as `'owner'`.
+- **Tenant Scoped Layout:** `/org/[slug]/layout.tsx` enforces RLS membership check, provides header navigation, and mounts `<TenantSwitcher />`.
+- **Tenant Switcher:** Interactive dropdown listing all tenant organizations the user has access to, with role badges, active tenant indication, and quick organization creation.
+- **Tenant Dashboard:** `/org/[slug]/page.tsx` displaying organization details, member counts, ticket counts, and RLS isolation status.
+- **Team & Member Management:** `/org/[slug]/members/page.tsx`
+  - Lists current members with roles and joined dates.
+  - Adding members by email (`addMemberAction`) with role assignment.
+  - Role promotion / demotion (`updateMemberRoleAction`) respecting RLS (`owner` vs `admin`).
+  - Member removal (`removeMemberAction`) and voluntary departure (`leaveOrganizationAction`), with last owner protection enforced by database trigger `prevent_last_owner_removal`.
+- **Organization Settings:** `/org/[slug]/settings/page.tsx` for updating organization name and owner-only deletion confirmation.
+
+---
+
+## 7. Ticket Operations & Multi-Tenant CRUD
+- **Tickets Schema:** `public.tickets` with `status` (`open`, `in_progress`, `resolved`, `closed`), `priority` (`low`, `medium`, `high`, `urgent`), `created_by` (profile), and `assigned_to` with composite FK constraint `tickets_assignee_is_member` ensuring assignees must belong to the same tenant.
+- **Server Actions:** `src/app/org/[slug]/tickets/actions.ts`
+  - `createTicketAction`: Validates title, status, priority, and verifies assignee membership before insertion.
+  - `updateTicketAction`: Updates title, description, status, priority, and assignee.
+  - `updateTicketStatusAction`: In-place status transition.
+  - `deleteTicketAction`: Deletes ticket under RLS policy `tickets_delete_author_or_admin` (author or tenant owner/admin).
+- **Ticket Views:**
+  - Listing: `/org/[slug]/tickets` with metrics chips (Total, Open, In Progress, Resolved), live text search, and status/priority/assignee filters.
+  - Creation: `/org/[slug]/tickets/new` with full form and member assignment dropdown.
+  - Detail & Edit: `/org/[slug]/tickets/[ticketId]` with inline status, priority, assignee configuration, content editor, and deletion.
+- **UI Confirmation Modals:** Replaced all browser `confirm()` alerts with accessible, custom Tailwind UI `<ConfirmModal />` (`src/components/ui/confirm-modal.tsx`) across member actions and ticket deletions.
+
+---
+
+## 8. Supabase CLI & Migrations Workflow
 The project is initialized with `supabase init` and linked to remote project `owkqbuypklkoaiddmnbt`:
 - Create new migration: `npx supabase migration new <name>`
 - Test migration dry-run: `npx supabase db push --dry-run`

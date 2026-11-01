@@ -35,7 +35,24 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANT: Do not run code between createServerClient and getClaims().
   // getClaims() validates the JWT and triggers a token refresh when needed.
-  await supabase.auth.getClaims();
+  const { data } = await supabase.auth.getClaims();
+
+  const pathname = request.nextUrl.pathname;
+  const isAuthRoute = pathname === "/login" || pathname === "/signup";
+
+  // Prevent authenticated users from visiting /login or /signup
+  if (data?.claims && isAuthRoute) {
+    const rawNext = request.nextUrl.searchParams.get("next");
+    const nextPath =
+      rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//")
+        ? rawNext
+        : "/";
+
+    const redirectUrl = new URL(nextPath, request.url);
+    return NextResponse.redirect(redirectUrl, {
+      headers: response.headers,
+    });
+  }
 
   return response;
 }

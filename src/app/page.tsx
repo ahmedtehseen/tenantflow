@@ -1,6 +1,15 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { Workflow, LogIn, UserPlus, Building, ShieldCheck, LogOut } from "lucide-react";
+import {
+  Workflow,
+  LogIn,
+  UserPlus,
+  Building,
+  ShieldCheck,
+  LogOut,
+  Plus,
+  ArrowRight,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -77,32 +86,64 @@ async function UserStatus() {
       </div>
 
       <div className="space-y-3">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-          Your Organizations
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+            Your Organizations
+          </h3>
+          <Link
+            href="/org/new"
+            className="flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+          >
+            <Plus className="size-3.5" />
+            New Organization
+          </Link>
+        </div>
+
         {memberships && memberships.length > 0 ? (
-          <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-100 dark:divide-zinc-800 dark:border-zinc-800">
+          <ul className="divide-y divide-zinc-100 rounded-xl border border-zinc-100 bg-zinc-50/50 dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-950/40">
             {memberships.map((m, idx) => {
               const org = Array.isArray(m.organizations) ? m.organizations[0] : m.organizations;
+              if (!org) return null;
               return (
-                <li key={idx} className="flex items-center justify-between p-3 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Building className="size-4 text-zinc-400" />
-                    <span className="font-medium text-zinc-800 dark:text-zinc-200">
-                      {org?.name ?? "Unknown"}
-                    </span>
-                    <span className="font-mono text-xs text-zinc-400">({org?.slug})</span>
-                  </div>
-                  <span className="rounded bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300">
-                    {m.role}
-                  </span>
+                <li key={idx}>
+                  <Link
+                    href={`/org/${org.slug}`}
+                    className="flex items-center justify-between p-3.5 text-sm hover:bg-zinc-100/70 dark:hover:bg-zinc-800/60 transition group rounded-lg"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex size-7 items-center justify-center rounded-lg bg-white shadow-2xs border border-zinc-200/60 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                        <Building className="size-3.5" />
+                      </div>
+                      <div>
+                        <span className="font-semibold text-zinc-900 dark:text-zinc-100 block text-xs">
+                          {org.name}
+                        </span>
+                        <span className="font-mono text-[11px] text-zinc-400">
+                          {org.slug}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 capitalize">
+                        {m.role}
+                      </span>
+                      <ArrowRight className="size-3.5 text-zinc-400 group-hover:translate-x-0.5 transition-transform" />
+                    </div>
+                  </Link>
                 </li>
               );
             })}
           </ul>
         ) : (
-          <div className="rounded-lg border border-dashed border-zinc-200 p-4 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-            No organization memberships yet.
+          <div className="rounded-xl border border-dashed border-zinc-200 p-6 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-400 space-y-3">
+            <p>No organization memberships yet.</p>
+            <Link
+              href="/org/new"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-medium text-white shadow-xs hover:bg-indigo-500 transition"
+            >
+              <Plus className="size-3.5" />
+              Create your first organization
+            </Link>
           </div>
         )}
       </div>
