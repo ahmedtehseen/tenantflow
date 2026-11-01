@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import Link from "next/link";
 import { Loader2, AlertCircle, ArrowLeft, Plus } from "lucide-react";
+import { Select } from "@/components/ui/select";
 import { createTicketAction, type TicketActionState } from "../actions";
 import type { MemberOption } from "../_components/ticket-list";
 
@@ -64,17 +65,18 @@ export function CreateTicketForm({
           >
             Priority
           </label>
-          <select
+          <Select
             id="priority"
             name="priority"
             defaultValue="medium"
-            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 shadow-2xs outline-none transition hover:bg-zinc-50 focus:border-indigo-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+            containerClassName="w-full"
+            className="w-full py-2"
           >
             <option value="low">Low</option>
             <option value="medium">Medium</option>
             <option value="high">High</option>
             <option value="urgent">Urgent</option>
-          </select>
+          </Select>
         </div>
 
         {/* Status */}
@@ -85,17 +87,18 @@ export function CreateTicketForm({
           >
             Initial Status
           </label>
-          <select
+          <Select
             id="status"
             name="status"
             defaultValue="open"
-            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 shadow-2xs outline-none transition hover:bg-zinc-50 focus:border-indigo-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+            containerClassName="w-full"
+            className="w-full py-2"
           >
             <option value="open">Open</option>
             <option value="in_progress">In Progress</option>
             <option value="resolved">Resolved</option>
             <option value="closed">Closed</option>
-          </select>
+          </Select>
         </div>
 
         {/* Assignee */}
@@ -106,11 +109,12 @@ export function CreateTicketForm({
           >
             Assignee
           </label>
-          <select
+          <Select
             id="assigned_to"
             name="assigned_to"
             defaultValue=""
-            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-700 shadow-2xs outline-none transition hover:bg-zinc-50 focus:border-indigo-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+            containerClassName="w-full"
+            className="w-full py-2"
           >
             <option value="">Unassigned</option>
             {members.map((m) => (
@@ -118,7 +122,7 @@ export function CreateTicketForm({
                 {m.full_name || m.email}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 

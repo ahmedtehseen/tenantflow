@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { UserPlus, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
 import { addMemberAction, type ActionState } from "../../../actions";
+import { Select } from "@/components/ui/select";
 import type { OrgRole } from "@/types/database";
 
 interface AddMemberFormProps {
@@ -65,16 +66,16 @@ export function AddMemberForm({
           className="flex-1 rounded-lg border border-zinc-200 bg-white px-3.5 py-2 text-xs text-zinc-900 shadow-2xs outline-none transition placeholder:text-zinc-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600/20 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
         />
 
-        <select
+        <Select
           name="role"
           value={role}
           onChange={(e) => setRole(e.target.value as OrgRole)}
-          className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs text-zinc-700 shadow-2xs outline-none transition focus:border-indigo-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+          className="py-2 text-xs"
         >
           <option value="member">Member</option>
           <option value="admin">Admin</option>
           {callerRole === "owner" && <option value="owner">Owner</option>}
-        </select>
+        </Select>
 
         <button
           type="submit"

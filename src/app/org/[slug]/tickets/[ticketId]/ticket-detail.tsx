@@ -12,6 +12,7 @@ import {
   Save,
 } from "lucide-react";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { Select } from "@/components/ui/select";
 import {
   updateTicketAction,
   deleteTicketAction,
@@ -226,18 +227,19 @@ export function TicketDetail({
                 >
                   Status
                 </label>
-                <select
+                <Select
                   id="status"
                   name="status"
                   value={status}
                   onChange={(e) => setStatus(e.target.value as TicketStatus)}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-800 shadow-2xs outline-none transition hover:bg-zinc-50 focus:border-indigo-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+                  containerClassName="w-full"
+                  className="w-full py-2"
                 >
                   <option value="open">Open</option>
                   <option value="in_progress">In Progress</option>
                   <option value="resolved">Resolved</option>
                   <option value="closed">Closed</option>
-                </select>
+                </Select>
               </div>
 
               {/* Priority */}
@@ -248,18 +250,19 @@ export function TicketDetail({
                 >
                   Priority
                 </label>
-                <select
+                <Select
                   id="priority"
                   name="priority"
                   value={priority}
                   onChange={(e) => setPriority(e.target.value as TicketPriority)}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-800 shadow-2xs outline-none transition hover:bg-zinc-50 focus:border-indigo-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+                  containerClassName="w-full"
+                  className="w-full py-2"
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
                   <option value="high">High</option>
                   <option value="urgent">Urgent</option>
-                </select>
+                </Select>
               </div>
 
               {/* Assignee */}
@@ -270,12 +273,13 @@ export function TicketDetail({
                 >
                   Assignee
                 </label>
-                <select
+                <Select
                   id="assigned_to"
                   name="assigned_to"
                   value={assignedTo}
                   onChange={(e) => setAssignedTo(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-800 shadow-2xs outline-none transition hover:bg-zinc-50 focus:border-indigo-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200"
+                  containerClassName="w-full"
+                  className="w-full py-2"
                 >
                   <option value="">Unassigned</option>
                   {members.map((m) => (
@@ -283,7 +287,7 @@ export function TicketDetail({
                       {m.full_name || m.email}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
 
               <div className="pt-3 border-t border-zinc-100 dark:border-zinc-800 space-y-3 text-xs text-zinc-500 dark:text-zinc-400">

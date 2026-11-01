@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { Circle, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { Circle, Clock, CheckCircle2, XCircle, ChevronDown } from "lucide-react";
 import { updateTicketStatusAction } from "../actions";
 import type { TicketStatus } from "@/types/database";
 
@@ -67,18 +67,22 @@ export function TicketStatusBadge({
     };
 
     return (
-      <div className="relative inline-block">
+      <div className="relative inline-flex items-center">
         <select
           value={status}
           disabled={isPending}
           onChange={handleStatusChange}
-          className={`appearance-none cursor-pointer rounded-md border px-2 py-0.5 text-xs font-medium outline-none transition disabled:opacity-50 ${config.classes}`}
+          className={`appearance-none cursor-pointer rounded-md border pl-2 pr-5 py-0.5 text-xs font-medium outline-none transition disabled:opacity-50 ${config.classes}`}
         >
           <option value="open">Open</option>
           <option value="in_progress">In Progress</option>
           <option value="resolved">Resolved</option>
           <option value="closed">Closed</option>
         </select>
+        <ChevronDown
+          className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 size-3 text-current opacity-60"
+          aria-hidden="true"
+        />
       </div>
     );
   }

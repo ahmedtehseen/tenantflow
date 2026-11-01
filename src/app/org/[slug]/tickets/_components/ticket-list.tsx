@@ -14,6 +14,7 @@ import {
 import { TicketStatusBadge } from "./ticket-status-badge";
 import { TicketPriorityBadge } from "./ticket-priority-badge";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { Select } from "@/components/ui/select";
 import { deleteTicketAction } from "../actions";
 import type { TicketStatus, TicketPriority, OrgRole } from "@/types/database";
 
@@ -238,36 +239,36 @@ export function TicketList({
 
         <div className="flex flex-wrap items-center gap-2">
           {/* Status Filter */}
-          <select
+          <Select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-xs font-medium text-zinc-700 shadow-2xs outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+            className="py-2 text-xs"
           >
             <option value="all">All Statuses</option>
             <option value="open">Open</option>
             <option value="in_progress">In Progress</option>
             <option value="resolved">Resolved</option>
             <option value="closed">Closed</option>
-          </select>
+          </Select>
 
           {/* Priority Filter */}
-          <select
+          <Select
             value={priorityFilter}
             onChange={(e) => setPriorityFilter(e.target.value)}
-            className="rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-xs font-medium text-zinc-700 shadow-2xs outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+            className="py-2 text-xs"
           >
             <option value="all">All Priorities</option>
             <option value="urgent">Urgent</option>
             <option value="high">High</option>
             <option value="medium">Medium</option>
             <option value="low">Low</option>
-          </select>
+          </Select>
 
           {/* Assignee Filter */}
-          <select
+          <Select
             value={assigneeFilter}
             onChange={(e) => setAssigneeFilter(e.target.value)}
-            className="rounded-lg border border-zinc-200 bg-white px-2.5 py-2 text-xs font-medium text-zinc-700 shadow-2xs outline-none transition hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+            className="py-2 text-xs"
           >
             <option value="all">All Assignees</option>
             <option value="me">Assigned to Me</option>
@@ -277,7 +278,7 @@ export function TicketList({
                 {m.full_name || m.email}
               </option>
             ))}
-          </select>
+          </Select>
 
           {/* Create Button */}
           <Link

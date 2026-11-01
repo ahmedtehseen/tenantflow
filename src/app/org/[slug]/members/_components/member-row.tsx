@@ -15,6 +15,7 @@ import {
   leaveOrganizationAction,
 } from "../../../actions";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
+import { Select } from "@/components/ui/select";
 import type { OrgRole } from "@/types/database";
 
 interface MemberRowProps {
@@ -169,18 +170,16 @@ export function MemberRow({
         {/* Role & Actions */}
         <div className="flex items-center gap-3 self-end sm:self-auto">
           {canModifyRole ? (
-            <div className="relative">
-              <select
-                value={member.role}
-                disabled={isPending}
-                onChange={handleRoleChange}
-                className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-800 shadow-2xs outline-none transition hover:bg-zinc-50 focus:border-indigo-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200 cursor-pointer disabled:opacity-50"
-              >
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-                {callerRole === "owner" && <option value="owner">Owner</option>}
-              </select>
-            </div>
+            <Select
+              value={member.role}
+              disabled={isPending}
+              onChange={handleRoleChange}
+              className="py-1 text-xs"
+            >
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+              {callerRole === "owner" && <option value="owner">Owner</option>}
+            </Select>
           ) : (
             renderRoleBadge(member.role)
           )}
