@@ -90,7 +90,7 @@ export function TicketDetail({
 
   const handleDelete = () => {
     startDeleteTransition(async () => {
-      await deleteTicketAction(ticket.id, orgId, orgSlug);
+      await deleteTicketAction(ticket.id, orgId, orgSlug, true);
     });
   };
 

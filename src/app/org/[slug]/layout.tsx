@@ -9,13 +9,7 @@ import { TenantNav } from "./_components/tenant-nav";
 
 export const instant = false;
 
-async function signOut() {
-  "use server";
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-  revalidatePath("/", "layout");
-  redirect("/");
-}
+import { signOutAction } from "@/lib/auth/actions";
 
 import { redirect } from "next/navigation";
 
@@ -106,7 +100,7 @@ export default async function TenantLayout({
               </span>
             </div>
 
-            <form action={signOut}>
+            <form action={signOutAction}>
               <button
                 type="submit"
                 title="Sign out"

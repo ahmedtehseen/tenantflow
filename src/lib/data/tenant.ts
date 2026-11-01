@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import type { OrgRole } from "@/types/database";
 
 export interface TenantOrgSummary {
@@ -125,9 +126,10 @@ export const getTenantContext = cache(
       };
     }
 
-    // If not found in user's memberships, check if org exists globally
+    // If not found in user's memberships, check if org exists globally via admin client
     // to distinguish 404 (Not Found) from 403 (Access Denied).
-    const { data: globalOrg } = await supabase
+    const adminClient = createAdminClient();
+    const { data: globalOrg } = await adminClient
       .from("organizations")
       .select("id, name, slug, created_by, created_at")
       .eq("slug", slug)

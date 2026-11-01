@@ -8,10 +8,8 @@ import {
   Check,
   ChevronsUpDown,
   Plus,
-  Shield,
-  ShieldAlert,
-  User,
 } from "lucide-react";
+import { RoleBadge } from "@/components/ui/role-badge";
 import type { OrgRole } from "@/types/database";
 
 interface TenantOrg {
@@ -63,31 +61,6 @@ export function TenantSwitcher({
     };
   }, [open]);
 
-  const getRoleBadge = (role: OrgRole) => {
-    switch (role) {
-      case "owner":
-        return (
-          <span className="inline-flex items-center gap-1 rounded bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700 dark:bg-indigo-950/70 dark:text-indigo-300">
-            <ShieldAlert className="size-3" />
-            Owner
-          </span>
-        );
-      case "admin":
-        return (
-          <span className="inline-flex items-center gap-1 rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-medium text-sky-700 dark:bg-sky-950/70 dark:text-sky-300">
-            <Shield className="size-3" />
-            Admin
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1 rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-            <User className="size-3" />
-            Member
-          </span>
-        );
-    }
-  };
 
   return (
     <div className="relative" ref={menuRef}>
@@ -106,7 +79,7 @@ export function TenantSwitcher({
             <span className="truncate text-xs font-semibold text-zinc-900 dark:text-zinc-100 max-w-[140px] sm:max-w-[200px]">
               {currentOrg.name}
             </span>
-            {getRoleBadge(currentRole)}
+            <RoleBadge role={currentRole} className="text-[11px] px-1.5" />
           </div>
           <span className="font-mono text-[11px] text-zinc-400 truncate">
             {currentOrg.slug}
@@ -153,7 +126,7 @@ export function TenantSwitcher({
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                    {getRoleBadge(org.role)}
+                    <RoleBadge role={org.role} className="text-[11px] px-1.5" />
                     {isActive && <Check className="size-3.5 text-indigo-600" />}
                   </div>
                 </button>

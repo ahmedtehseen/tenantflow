@@ -11,20 +11,11 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
-
-async function signOut() {
-  "use server";
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-  revalidatePath("/", "layout");
-  redirect("/");
-}
+import { getCurrentUser } from "@/lib/data/tenant";
+import { signOutAction } from "@/lib/auth/actions";
 
 async function UserStatus() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
 
   if (!user) {
     return (
@@ -47,17 +38,22 @@ async function UserStatus() {
     );
   }
 
-  // Fetch user profile & tenant memberships
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", user.id)
-    .single();
+  // Parallel database queries for user profile & tenant memberships
+  const supabase = await createClient();
+  const [profileResult, membershipsResult] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .eq("id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("organization_members")
+      .select("role, organizations(id, name, slug)")
+      .eq("user_id", user.id),
+  ]);
 
-  const { data: memberships } = await supabase
-    .from("organization_members")
-    .select("role, organizations(id, name, slug)")
-    .eq("user_id", user.id);
+  const profile = profileResult.data;
+  const memberships = membershipsResult.data;
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -74,7 +70,7 @@ async function UserStatus() {
             {user.email} &middot; ID: {user.id.slice(0, 8)}...
           </p>
         </div>
-        <form action={signOut}>
+        <form action={signOutAction}>
           <button
             type="submit"
             className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
@@ -159,6 +155,39 @@ async function UserStatus() {
   );
 }
 
+function UserStatusSkeleton() {
+  return (
+    <div className="flex flex-col gap-6 w-full max-w-xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 animate-pulse">
+      <div className="flex items-center justify-between border-b border-zinc-100 pb-4 dark:border-zinc-800">
+        <div className="space-y-2">
+          <div className="h-4 w-24 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+          <div className="h-6 w-44 rounded-md bg-zinc-200 dark:bg-zinc-800" />
+          <div className="h-3 w-56 rounded bg-zinc-100 dark:bg-zinc-850" />
+        </div>
+        <div className="h-8 w-20 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
+      </div>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="h-3 w-32 rounded bg-zinc-200 dark:bg-zinc-800" />
+          <div className="h-3 w-28 rounded bg-zinc-100 dark:bg-zinc-850" />
+        </div>
+        <div className="rounded-xl border border-zinc-100 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="size-7 rounded-lg bg-zinc-200 dark:bg-zinc-800" />
+              <div className="space-y-1">
+                <div className="h-3 w-28 rounded bg-zinc-200 dark:bg-zinc-800" />
+                <div className="h-2.5 w-16 rounded bg-zinc-100 dark:bg-zinc-850" />
+              </div>
+            </div>
+            <div className="h-5 w-14 rounded-md bg-zinc-200 dark:bg-zinc-800" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   return (
     <div className="flex min-h-full flex-1 flex-col items-center justify-center bg-zinc-50 px-4 py-16 dark:bg-zinc-950">
@@ -175,13 +204,7 @@ export default function Home() {
       </div>
 
       {/* Dynamic session read inside Suspense boundary for Next.js 16 cache compliance */}
-      <Suspense
-        fallback={
-          <div className="flex items-center justify-center h-48 w-full max-w-xl rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900 animate-pulse">
-            <span className="text-sm text-zinc-400">Loading session...</span>
-          </div>
-        }
-      >
+      <Suspense fallback={<UserStatusSkeleton />}>
         <UserStatus />
       </Suspense>
     </div>
