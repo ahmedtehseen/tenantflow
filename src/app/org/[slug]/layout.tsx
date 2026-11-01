@@ -8,6 +8,8 @@ import { TenantSwitcher } from "./_components/tenant-switcher";
 import { TenantNav } from "./_components/tenant-nav";
 import type { OrgRole } from "@/types/database";
 
+export const instant = false;
+
 async function signOut() {
   "use server";
   const supabase = await createClient();
