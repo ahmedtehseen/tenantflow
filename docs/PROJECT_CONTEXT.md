@@ -84,7 +84,16 @@ Migration applied on remote project: `supabase/migrations/01_init_multi_tenancy.
 
 ---
 
-## 8. Supabase CLI & Migrations Workflow
+## 8. Performance Optimization & Request Deduplication
+- **Data Access Layer:** `src/lib/data/tenant.ts`
+  - `getCurrentUser`: Memoized with `React.cache()` to ensure `auth.getUser()` runs at most once per request.
+  - `getTenantContext(slug)`: Request-memoized tenant resolver that collapses 5 sequential queries into a single joined query (`organization_members` joined with `organizations`), caching the result across both `layout.tsx` and child pages.
+- **Parallel Database Execution:** Independent queries on child pages (e.g., ticket data and member lists) execute concurrently via `Promise.all` rather than sequentially.
+- **Client Route Prefetching:** Navigation links in `<TenantNav />` and dashboard tiles declare `prefetch={true}`, warming the Next.js client router cache in background viewports for instant transitions (<50ms).
+
+---
+
+## 9. Supabase CLI & Migrations Workflow
 The project is initialized with `supabase init` and linked to remote project `owkqbuypklkoaiddmnbt`:
 - Create new migration: `npx supabase migration new <name>`
 - Test migration dry-run: `npx supabase db push --dry-run`
