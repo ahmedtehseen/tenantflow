@@ -1,8 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { revalidatePath } from "next/cache";
 import { Workflow, LogOut, ShieldAlert } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
 import { getTenantContext } from "@/lib/data/tenant";
 import { TenantSwitcher } from "./_components/tenant-switcher";
 import { TenantNav } from "./_components/tenant-nav";
@@ -10,8 +8,6 @@ import { TenantNav } from "./_components/tenant-nav";
 export const instant = false;
 
 import { signOutAction } from "@/lib/auth/actions";
-
-import { redirect } from "next/navigation";
 
 interface TenantLayoutProps {
   children: React.ReactNode;

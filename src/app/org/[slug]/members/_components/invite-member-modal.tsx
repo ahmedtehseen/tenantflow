@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useActionState, useTransition } from "react";
+import { useState, useEffect, useRef, useActionState } from "react";
 import {
   UserPlus,
   X,
@@ -86,19 +86,12 @@ function InviteDialog({
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<InvitationRole>("member");
   const [copied, setCopied] = useState(false);
-  const [origin, setOrigin] = useState("");
 
   const boundAction = createInvitationAction.bind(null, orgId, orgSlug);
   const [state, formAction, isPending] = useActionState(
     boundAction,
     initialActionState,
   );
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setOrigin(window.location.origin);
-    }
-  }, []);
 
   // Autofocus email input on mount
   useEffect(() => {
@@ -122,20 +115,23 @@ function InviteDialog({
     };
   }, [isPending, onClose]);
 
-  const inviteLink = state.invitationToken
-    ? `${origin || ""}/invite/${state.invitationToken}`
-    : "";
-
   const handleCopyLink = async () => {
-    if (!inviteLink) return;
+    if (!state.invitationToken) return;
     try {
-      await navigator.clipboard.writeText(inviteLink);
+      const fullUrl = `${window.location.origin}/invite/${state.invitationToken}`;
+      await navigator.clipboard.writeText(fullUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Fallback
     }
   };
+
+  const displayInviteLink = state.invitationToken
+    ? typeof window !== "undefined"
+      ? `${window.location.origin}/invite/${state.invitationToken}`
+      : `/invite/${state.invitationToken}`
+    : "";
 
   return (
     <div
@@ -205,7 +201,7 @@ function InviteDialog({
               <div className="flex items-center gap-2">
                 <div className="flex-1 flex items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-700 font-mono select-all dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 overflow-x-auto">
                   <LinkIcon className="size-3.5 text-zinc-400 shrink-0" />
-                  <span className="truncate">{inviteLink}</span>
+                  <span className="truncate">{displayInviteLink}</span>
                 </div>
                 <button
                   type="button"

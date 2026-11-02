@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   Mail,
   MailCheck,
@@ -8,7 +8,6 @@ import {
   Copy,
   Check,
   Trash2,
-  Loader2,
   AlertCircle,
 } from "lucide-react";
 import { revokeInvitationAction } from "../../../actions";
@@ -43,19 +42,12 @@ export function PendingInvitationsList({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [origin, setOrigin] = useState("");
 
   const canRevoke = callerRole === "owner" || callerRole === "admin";
 
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setOrigin(window.location.origin);
-    }
-  }, []);
-
   const handleCopy = async (token: string, id: string) => {
-    const url = `${origin}/invite/${token}`;
     try {
+      const url = `${window.location.origin}/invite/${token}`;
       await navigator.clipboard.writeText(url);
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);

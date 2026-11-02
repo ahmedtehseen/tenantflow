@@ -4,16 +4,13 @@ import {
   Workflow,
   Building2,
   AlertCircle,
-  Clock,
-  Mail,
   User,
-  Shield,
   LogIn,
   UserPlus,
-  ArrowRight,
 } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUser } from "@/lib/data/tenant";
+import { isInvitationActive } from "@/lib/invitations/invitation-utils";
 import { RoleBadge } from "@/components/ui/role-badge";
 import { AcceptInvitationForm } from "./_components/accept-invitation-form";
 import type { OrgRole } from "@/types/database";
@@ -49,17 +46,18 @@ export default async function InvitePage({ params }: InvitePageProps) {
         id,
         name,
         slug
+      ),
+      inviter:profiles!invited_by (
+        id,
+        email,
+        full_name,
+        avatar_url
       )
     `)
     .eq("token", trimmedToken)
     .maybeSingle();
 
-  const now = Date.now();
-  const isInvalid =
-    !invitation ||
-    invitation.accepted_at !== null ||
-    invitation.revoked_at !== null ||
-    new Date(invitation.expires_at).getTime() <= now;
+  const isInvalid = !invitation || !isInvitationActive(invitation);
 
   // Check current authentication state
   const currentUser = await getCurrentUser();
@@ -110,6 +108,13 @@ export default async function InvitePage({ params }: InvitePageProps) {
             const org = Array.isArray(invitation.organizations)
               ? invitation.organizations[0]
               : invitation.organizations;
+
+            const inviter = Array.isArray(invitation.inviter)
+              ? invitation.inviter[0]
+              : invitation.inviter;
+
+            const inviterDisplayName =
+              inviter?.full_name || inviter?.email || "Workspace Administrator";
 
             if (!org || !org.slug) {
               return (
@@ -166,6 +171,13 @@ export default async function InvitePage({ params }: InvitePageProps) {
                     <span className="font-semibold text-zinc-900 dark:text-zinc-100">
                       {org.name}
                     </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-zinc-500 dark:text-zinc-400">Invited By</span>
+                    <div className="flex items-center gap-1.5 font-medium text-zinc-900 dark:text-zinc-100">
+                      <User className="size-3.5 text-zinc-400" />
+                      <span>{inviterDisplayName}</span>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-zinc-500 dark:text-zinc-400">Offered Role</span>

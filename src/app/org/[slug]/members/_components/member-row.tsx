@@ -3,9 +3,6 @@
 import { useTransition, useState } from "react";
 import {
   Trash2,
-  Shield,
-  ShieldAlert,
-  User,
   Loader2,
   LogOut,
 } from "lucide-react";
