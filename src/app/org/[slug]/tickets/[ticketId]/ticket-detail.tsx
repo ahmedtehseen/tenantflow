@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Select } from "@/components/ui/select";
+import { getAvailableNextStatuses } from "@/lib/tickets/lifecycle";
 import {
   updateTicketAction,
   deleteTicketAction,
@@ -51,6 +52,13 @@ interface TicketDetailProps {
   callerRole: OrgRole;
 }
 
+const STATUS_OPTIONS: { value: TicketStatus; label: string }[] = [
+  { value: "open", label: "Open" },
+  { value: "in_progress", label: "In Progress" },
+  { value: "resolved", label: "Resolved" },
+  { value: "closed", label: "Closed" },
+];
+
 const initialActionState: TicketActionState = {};
 
 export function TicketDetail({
@@ -71,6 +79,11 @@ export function TicketDetail({
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
+
+  const availableNext = getAvailableNextStatuses(ticket, {
+    id: callerUserId,
+    role: callerRole,
+  });
 
   const boundUpdateAction = updateTicketAction.bind(
     null,
@@ -235,11 +248,21 @@ export function TicketDetail({
                   containerClassName="w-full"
                   className="w-full py-2"
                 >
-                  <option value="open">Open</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="resolved">Resolved</option>
-                  <option value="closed">Closed</option>
+                  {STATUS_OPTIONS.map((opt) => (
+                    <option
+                      key={opt.value}
+                      value={opt.value}
+                      disabled={opt.value !== ticket.status && !availableNext.includes(opt.value)}
+                    >
+                      {opt.label}
+                    </option>
+                  ))}
                 </Select>
+                {ticket.status === "closed" && (
+                  <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                    Reopening closed tickets requires Workspace Admin or Owner authority.
+                  </p>
+                )}
               </div>
 
               {/* Priority */}

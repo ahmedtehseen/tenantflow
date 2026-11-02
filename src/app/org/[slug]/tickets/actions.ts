@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantContext, assertTenantScoping } from "@/lib/data/tenant";
+import { canTransitionTicket } from "@/lib/tickets/lifecycle";
 import type { TicketStatus, TicketPriority } from "@/types/database";
 
 export interface TicketActionState {
@@ -79,8 +81,11 @@ export async function createTicketAction(
   prevState: TicketActionState | null,
   formData: FormData,
 ): Promise<TicketActionState> {
+  const context = await getTenantContext(orgSlug);
+  assertTenantScoping(context, orgId);
+
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = context.user;
 
   if (!user) {
     return { error: "You must be signed in to create a ticket." };
@@ -124,8 +129,11 @@ export async function updateTicketAction(
   prevState: TicketActionState | null,
   formData: FormData,
 ): Promise<TicketActionState> {
+  const context = await getTenantContext(orgSlug);
+  assertTenantScoping(context, orgId);
+
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = context.user;
 
   if (!user) {
     return { error: "You must be signed in." };
@@ -134,6 +142,28 @@ export async function updateTicketAction(
   const validation = await validateTicketInput(formData, orgId, supabase);
   if (validation.error || !validation.data) {
     return { error: validation.error || "Invalid ticket data." };
+  }
+
+  const { data: ticket, error: fetchError } = await supabase
+    .from("tickets")
+    .select("id, status, created_by, assigned_to")
+    .eq("id", ticketId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (fetchError || !ticket) {
+    return { error: "Ticket not found." };
+  }
+
+  if (validation.data.status !== ticket.status) {
+    const evaluation = canTransitionTicket(ticket, validation.data.status, {
+      id: user.id,
+      role: context.currentRole,
+    });
+
+    if (!evaluation.allowed) {
+      return { error: evaluation.reason || "Illegal status transition." };
+    }
   }
 
   const { error } = await supabase
@@ -166,8 +196,11 @@ export async function updateTicketStatusAction(
   orgSlug: string,
   newStatus: TicketStatus,
 ): Promise<TicketActionState> {
+  const context = await getTenantContext(orgSlug);
+  assertTenantScoping(context, orgId);
+
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = context.user;
 
   if (!user) {
     return { error: "You must be signed in." };
@@ -175,6 +208,26 @@ export async function updateTicketStatusAction(
 
   if (!VALID_STATUSES.includes(newStatus)) {
     return { error: "Invalid status." };
+  }
+
+  const { data: ticket, error: fetchError } = await supabase
+    .from("tickets")
+    .select("id, status, created_by, assigned_to")
+    .eq("id", ticketId)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  if (fetchError || !ticket) {
+    return { error: "Ticket not found." };
+  }
+
+  const evaluation = canTransitionTicket(ticket, newStatus, {
+    id: user.id,
+    role: context.currentRole,
+  });
+
+  if (!evaluation.allowed) {
+    return { error: evaluation.reason || "Illegal status transition." };
   }
 
   const { error } = await supabase
@@ -202,8 +255,11 @@ export async function deleteTicketAction(
   orgSlug: string,
   shouldRedirect: boolean = false,
 ): Promise<TicketActionState> {
+  const context = await getTenantContext(orgSlug);
+  assertTenantScoping(context, orgId);
+
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = context.user;
 
   if (!user) {
     return { error: "You must be signed in." };
