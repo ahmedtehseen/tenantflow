@@ -11,7 +11,9 @@
   },
   "imports": {
     "#tickets/lifecycle": "./src/lib/tickets/lifecycle.ts",
-    "#data/scoping": "./src/lib/data/scoping.ts"
+    "#data/scoping": "./src/lib/data/scoping.ts",
+    "#invitations/utils": "./src/lib/invitations/invitation-utils.ts",
+    "#types/database": "./src/types/database.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
