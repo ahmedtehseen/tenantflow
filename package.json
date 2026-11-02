@@ -10,7 +10,8 @@
     "test": "node --test --experimental-strip-types tests/**/*.test.ts"
   },
   "imports": {
-    "#tickets/lifecycle": "./src/lib/tickets/lifecycle.ts"
+    "#tickets/lifecycle": "./src/lib/tickets/lifecycle.ts",
+    "#data/scoping": "./src/lib/data/scoping.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

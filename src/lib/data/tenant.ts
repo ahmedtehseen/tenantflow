@@ -4,6 +4,14 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { OrgRole } from "@/types/database";
+import { resolveTenantAccess } from "./scoping";
+
+export {
+  TenantScopingError,
+  assertTenantScoping,
+  resolveTenantAccess,
+  type TenantAccessDecision,
+} from "./scoping";
 
 export interface TenantOrgSummary {
   id: string;
@@ -127,25 +135,34 @@ export const getTenantContext = cache(
     }
 
     // If not found in user's memberships, check if org exists globally via admin client
-    // to distinguish 404 (Not Found) from 403 (Access Denied).
+    // to enforce zero-knowledge isolation (ADR 0001).
     const adminClient = createAdminClient();
     const { data: globalOrg } = await adminClient
       .from("organizations")
-      .select("id, name, slug, created_by, created_at")
+      .select("id, name, slug, created_by, created_at, is_public_directory")
       .eq("slug", slug)
       .maybeSingle();
 
-    if (!globalOrg) {
+    const access = resolveTenantAccess(false, globalOrg?.is_public_directory ?? false);
+
+    if (access === "not_found" || !globalOrg) {
       notFound();
     }
 
-    // Org exists but user is not a member -> return with null role (for Access Denied screen)
+    // Org exists and is in the public directory, but user is not a member ->
+    // return context with null role so layout displays 403 Access Denied screen.
     return {
       user: {
         id: user.id,
         email: user.email,
       },
-      currentOrg: globalOrg,
+      currentOrg: {
+        id: globalOrg.id,
+        name: globalOrg.name,
+        slug: globalOrg.slug,
+        created_by: globalOrg.created_by,
+        created_at: globalOrg.created_at,
+      },
       currentRole: null as unknown as OrgRole,
       organizations,
       profile: profileResult.data ?? null,
