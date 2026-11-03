@@ -37,6 +37,12 @@ export async function login(
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
+    if (error.message.toLowerCase().includes("email not confirmed")) {
+      return {
+        error: "Please confirm your email address before signing in. Check your inbox or spam folder.",
+        fields: { email },
+      };
+    }
     // Generic message to avoid leaking which accounts exist.
     return { error: "Invalid email or password.", fields: { email } };
   }

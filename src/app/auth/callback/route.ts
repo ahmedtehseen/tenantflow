@@ -21,11 +21,13 @@ export async function GET(request: NextRequest) {
     if (!error) {
       return NextResponse.redirect(new URL(next, origin));
     }
+    console.error("[auth/callback] exchangeCodeForSession error:", error.message);
   } else if (tokenHash && type) {
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
     if (!error) {
       return NextResponse.redirect(new URL(next, origin));
     }
+    console.error("[auth/callback] verifyOtp error:", error.message);
   }
 
   const loginUrl = new URL("/login", origin);
