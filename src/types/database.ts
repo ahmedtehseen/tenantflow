@@ -107,6 +107,38 @@ export interface Ticket {
   assignee?: Profile;
 }
 
+export type TicketActivityType =
+  | "created"
+  | "status_changed"
+  | "priority_changed"
+  | "assignee_changed"
+  | "details_updated";
+
+export interface TicketActivity {
+  id: string;
+  organization_id: string;
+  ticket_id: string;
+  actor_id: string | null;
+  activity_type: TicketActivityType;
+  old_value: string | null;
+  new_value: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  actor?: Profile;
+}
+
+export interface TicketActivityInsert {
+  id?: string;
+  organization_id: string;
+  ticket_id: string;
+  actor_id?: string | null;
+  activity_type: TicketActivityType;
+  old_value?: string | null;
+  new_value?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -134,6 +166,11 @@ export interface Database {
         Row: Ticket;
         Insert: Omit<Ticket, "id" | "created_at" | "updated_at">;
         Update: Partial<Omit<Ticket, "id">>;
+      };
+      ticket_activities: {
+        Row: TicketActivity;
+        Insert: TicketActivityInsert;
+        Update: Partial<TicketActivity>;
       };
     };
   };
