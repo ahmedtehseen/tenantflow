@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTenantContext } from "@/lib/data/tenant";
 import { TicketDetail } from "./ticket-detail";
 import type { MemberOption } from "../_components/ticket-list";
+import type { ActivityItem } from "./_components/activity-timeline";
 
 interface TicketDetailPageProps {
   params: Promise<{ slug: string; ticketId: string }>;
@@ -17,8 +18,8 @@ export default async function TicketDetailPage({
   // Instant in-memory cache hit from layout
   const { user, currentOrg: org, currentRole } = await getTenantContext(slug);
 
-  // Parallel fetch: ticket and organization members
-  const [ticketResult, membersResult] = await Promise.all([
+  // Parallel fetch: ticket, organization members, and ticket activities
+  const [ticketResult, membersResult, activitiesResult] = await Promise.all([
     supabase
       .from("tickets")
       .select("*")
@@ -36,6 +37,22 @@ export default async function TicketDetailPage({
         )
       `)
       .eq("organization_id", org.id),
+    supabase
+      .from("ticket_activities")
+      .select(`
+        id,
+        ticket_id,
+        organization_id,
+        actor_id,
+        activity_type,
+        old_value,
+        new_value,
+        metadata,
+        created_at,
+        actor:profiles!ticket_activities_actor_id_fkey(id, full_name, email)
+      `)
+      .eq("ticket_id", ticketId)
+      .order("created_at", { ascending: false }),
   ]);
 
   const ticket = ticketResult.data;
@@ -72,12 +89,52 @@ export default async function TicketDetailPage({
     ? memberMap.get(ticket.assigned_to) ?? null
     : null;
 
+  const activitiesData = (activitiesResult.data as unknown as Array<{
+    id: string;
+    ticket_id: string;
+    organization_id: string;
+    actor_id: string | null;
+    activity_type: ActivityItem["activity_type"];
+    old_value: string | null;
+    new_value: string | null;
+    metadata: Record<string, unknown>;
+    created_at: string;
+    actor?:
+      | { id: string; full_name: string | null; email: string }
+      | Array<{ id: string; full_name: string | null; email: string }>
+      | null;
+  }>) || [];
+
+  const activities: ActivityItem[] = activitiesData.map((act) => {
+    const rawActor = Array.isArray(act.actor) ? act.actor[0] : act.actor;
+    const actor = rawActor || (act.actor_id ? memberMap.get(act.actor_id) : null) || null;
+    return {
+      id: act.id,
+      ticket_id: act.ticket_id,
+      organization_id: act.organization_id,
+      actor_id: act.actor_id,
+      activity_type: act.activity_type,
+      old_value: act.old_value,
+      new_value: act.new_value,
+      metadata: (act.metadata || {}) as Record<string, unknown>,
+      created_at: act.created_at,
+      actor: actor
+        ? {
+            id: actor.id,
+            full_name: actor.full_name,
+            email: actor.email,
+          }
+        : null,
+    };
+  });
+
   return (
     <TicketDetail
       ticket={ticket}
       creatorProfile={creatorProfile}
       assigneeProfile={assigneeProfile}
       members={memberOptions}
+      activities={activities}
       orgId={org.id}
       orgSlug={org.slug}
       callerUserId={user.id}

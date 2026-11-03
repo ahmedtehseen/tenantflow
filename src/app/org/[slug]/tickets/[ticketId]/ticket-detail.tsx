@@ -25,6 +25,10 @@ import {
 } from "../actions";
 import type { MemberOption } from "../_components/ticket-list";
 import type { TicketStatus, TicketPriority, OrgRole } from "@/types/database";
+import {
+  ActivityTimeline,
+  type ActivityItem,
+} from "./_components/activity-timeline";
 
 interface TicketDetailProps {
   ticket: {
@@ -50,6 +54,7 @@ interface TicketDetailProps {
     email: string;
   } | null;
   members: MemberOption[];
+  activities: ActivityItem[];
   orgId: string;
   orgSlug: string;
   callerUserId: string;
@@ -70,6 +75,7 @@ export function TicketDetail({
   creatorProfile,
   assigneeProfile,
   members,
+  activities = [],
   orgId,
   orgSlug,
   callerUserId,
@@ -262,6 +268,25 @@ export function TicketDetail({
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* Activity & History Timeline Card */}
+            <div className="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-2xs dark:border-zinc-800/80 dark:bg-zinc-900 space-y-5">
+              <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
+                <div className="space-y-0.5">
+                  <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                    Activity &amp; History
+                  </h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Audit log of state transitions, reassignments, and updates.
+                  </p>
+                </div>
+                <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                  {activities.length} {activities.length === 1 ? "event" : "events"}
+                </span>
+              </div>
+
+              <ActivityTimeline activities={activities} members={members} />
             </div>
           </div>
 
