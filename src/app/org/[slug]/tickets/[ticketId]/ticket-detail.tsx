@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useActionState } from "react";
+import { useState, useEffect, useTransition, useActionState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -10,10 +10,14 @@ import {
   AlertCircle,
   Loader2,
   Save,
+  Lock,
 } from "lucide-react";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Select } from "@/components/ui/select";
-import { getAvailableNextStatuses } from "@/lib/tickets/lifecycle";
+import {
+  getAvailableNextStatuses,
+  canEditTicket,
+} from "@/lib/tickets/lifecycle";
 import {
   updateTicketAction,
   deleteTicketAction,
@@ -76,6 +80,29 @@ export function TicketDetail({
   const [status, setStatus] = useState<TicketStatus>(ticket.status);
   const [priority, setPriority] = useState<TicketPriority>(ticket.priority);
   const [assignedTo, setAssignedTo] = useState<string>(ticket.assigned_to || "");
+
+  const canEdit = canEditTicket(ticket, {
+    id: callerUserId,
+    role: callerRole,
+  }).allowed;
+
+  // Synchronize local form state when server-refreshed props arrive
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setTitle(ticket.title);
+    setDescription(ticket.description || "");
+    setStatus(ticket.status);
+    setPriority(ticket.priority);
+    setAssignedTo(ticket.assigned_to || "");
+  }, [
+    ticket.title,
+    ticket.description,
+    ticket.status,
+    ticket.priority,
+    ticket.assigned_to,
+    ticket.updated_at,
+  ]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
@@ -161,8 +188,17 @@ export function TicketDetail({
         </div>
       )}
 
+      {!canEdit && (
+        <div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
+          <Lock className="size-4 shrink-0" />
+          <span>
+            Read-Only: You cannot edit this ticket because you are not the author, assignee, or a workspace admin.
+          </span>
+        </div>
+      )}
+
       {/* Main Form */}
-      <form action={formAction}>
+      <form key={`${ticket.id}-${ticket.updated_at}`} action={formAction}>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Main ticket body (Left 2 cols) */}
           <div className="lg:col-span-2 space-y-6">
@@ -179,9 +215,10 @@ export function TicketDetail({
                   name="title"
                   type="text"
                   required
+                  disabled={!canEdit || isUpdatePending}
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-zinc-900 shadow-2xs outline-none transition focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600/20 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+                  className="w-full rounded-lg border border-zinc-200 bg-white px-3.5 py-2.5 text-sm font-semibold text-zinc-900 shadow-2xs outline-none transition focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
                 />
               </div>
 
@@ -196,32 +233,35 @@ export function TicketDetail({
                   id="description"
                   name="description"
                   rows={8}
+                  disabled={!canEdit || isUpdatePending}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Add details, reproduction steps, or context..."
-                  className="w-full rounded-lg border border-zinc-200 bg-white px-3.5 py-2.5 text-xs leading-relaxed text-zinc-900 shadow-2xs outline-none transition focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600/20 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+                  className="w-full rounded-lg border border-zinc-200 bg-white px-3.5 py-2.5 text-xs leading-relaxed text-zinc-900 shadow-2xs outline-none transition focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
                 />
               </div>
 
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="submit"
-                  disabled={isUpdatePending}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white shadow-2xs hover:bg-indigo-500 disabled:opacity-50 transition cursor-pointer"
-                >
-                  {isUpdatePending ? (
-                    <>
-                      <Loader2 className="size-3.5 animate-spin" />
-                      Saving changes...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="size-3.5" />
-                      Save Changes
-                    </>
-                  )}
-                </button>
-              </div>
+              {canEdit && (
+                <div className="pt-2 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={isUpdatePending}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white shadow-2xs hover:bg-indigo-500 disabled:opacity-50 transition cursor-pointer"
+                  >
+                    {isUpdatePending ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin" />
+                        Saving changes...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="size-3.5" />
+                        Save Changes
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -244,6 +284,7 @@ export function TicketDetail({
                   id="status"
                   name="status"
                   value={status}
+                  disabled={!canEdit || isUpdatePending}
                   onChange={(e) => setStatus(e.target.value as TicketStatus)}
                   containerClassName="w-full"
                   className="w-full py-2"
@@ -277,6 +318,7 @@ export function TicketDetail({
                   id="priority"
                   name="priority"
                   value={priority}
+                  disabled={!canEdit || isUpdatePending}
                   onChange={(e) => setPriority(e.target.value as TicketPriority)}
                   containerClassName="w-full"
                   className="w-full py-2"
@@ -300,6 +342,7 @@ export function TicketDetail({
                   id="assigned_to"
                   name="assigned_to"
                   value={assignedTo}
+                  disabled={!canEdit || isUpdatePending}
                   onChange={(e) => setAssignedTo(e.target.value)}
                   containerClassName="w-full"
                   className="w-full py-2"
