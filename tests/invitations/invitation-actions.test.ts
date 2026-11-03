@@ -259,5 +259,39 @@ describe("Token-Based Invitation Engine (ADR 0002 & ADR 0003)", () => {
 
       process.env.NEXT_PUBLIC_APP_URL = prevEnv;
     });
+
+    it("preserves localhost base URL when request headers indicate local development", () => {
+      const prevEnv = process.env.NEXT_PUBLIC_APP_URL;
+      delete process.env.NEXT_PUBLIC_APP_URL;
+
+      const localHeaders = new Headers({
+        host: "localhost:3000",
+      });
+      assert.equal(getAppBaseUrl(localHeaders), "http://localhost:3000");
+
+      const forwardedLocal = new Headers({
+        "x-forwarded-host": "127.0.0.1:4000",
+        "x-forwarded-proto": "http",
+      });
+      assert.equal(getAppBaseUrl(forwardedLocal), "http://127.0.0.1:4000");
+
+      process.env.NEXT_PUBLIC_APP_URL = prevEnv;
+    });
+
+    it("falls back to canonical production URL for Vercel preview hosts to prevent SSO wall", () => {
+      const prevEnv = process.env.NEXT_PUBLIC_APP_URL;
+      delete process.env.NEXT_PUBLIC_APP_URL;
+
+      const previewHeaders = new Headers({
+        "x-forwarded-host": "tenantflow-tehseens-projects-fdae8dbe.vercel.app",
+        "x-forwarded-proto": "https",
+      });
+      assert.equal(
+        getAppBaseUrl(previewHeaders),
+        "https://tenantflow-alpha.vercel.app",
+      );
+
+      process.env.NEXT_PUBLIC_APP_URL = prevEnv;
+    });
   });
 });

@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import {
   getInvitationStatus,
   type InvitationRole,
@@ -44,11 +43,18 @@ export function isValidInvitationRole(role: unknown): role is InvitationRole {
 
 /**
  * Generates a cryptographically secure, URL-safe 256-bit token.
- * Uses base64url encoding (no '+', '/', or '=' characters), making it safe
- * for direct inclusion in email links and route params.
+ * Uses Web Crypto API (supported in Node.js, browsers, and edge runtimes)
+ * with base64url encoding (no '+', '/', or '=' characters).
  */
 export function generateInvitationToken(): string {
-  return randomBytes(32).toString("base64url");
+  const bytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(bytes);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64 = typeof btoa === "function" ? btoa(binary) : Buffer.from(bytes).toString("base64");
+  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 /**
@@ -67,16 +73,29 @@ export function isInvitationActive(invitation: {
  * Resolves the application base URL for generating user-facing links.
  * 
  * Order of precedence:
- * 1. Explicit `NEXT_PUBLIC_APP_URL` environment variable.
- * 2. If running in a browser:
- *    - If localhost / 127.0.0.1 -> use window.location.origin (preserves local testing).
+ * 1. Explicit `NEXT_PUBLIC_APP_URL` or `NEXT_PUBLIC_SITE_URL` environment variable.
+ * 2. If request headers are provided (server-side):
+ *    - If localhost / 127.0.0.1 -> use http://localhost:port (preserves local testing).
  *    - Otherwise (e.g. Vercel preview or production) -> default to https://tenantflow-alpha.vercel.app
  *      to avoid Vercel Deployment Protection / SSO login gates on preview URLs.
- * 3. Fallback to production default https://tenantflow-alpha.vercel.app
+ * 3. If running in a browser (client-side):
+ *    - If localhost / 127.0.0.1 -> use window.location.origin.
+ *    - Otherwise -> default to https://tenantflow-alpha.vercel.app.
+ * 4. Fallback to production default https://tenantflow-alpha.vercel.app
  */
-export function getAppBaseUrl(): string {
+export function getAppBaseUrl(requestHeaders?: Headers): string {
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
+  }
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "");
+  }
+  if (requestHeaders) {
+    const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "";
+    if (host.startsWith("localhost") || host.startsWith("127.0.0.1")) {
+      const proto = requestHeaders.get("x-forwarded-proto") ?? "http";
+      return `${proto}://${host}`;
+    }
   }
   if (typeof window !== "undefined") {
     const hostname = window.location.hostname;

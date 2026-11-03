@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { safeRedirectPath } from "@/lib/utils";
+import { getAppBaseUrl } from "@/lib/invitations/invitation-utils";
 
 export type AuthFormState = {
   error?: string;
@@ -51,6 +52,7 @@ export async function signup(
   const fullName = readString(formData, "fullName");
   const email = readString(formData, "email").toLowerCase();
   const password = formData.get("password");
+  const next = safeRedirectPath(readString(formData, "next"));
   const fields = { email, fullName };
 
   if (!fullName || fullName.length > 120) {
@@ -66,8 +68,12 @@ export async function signup(
     };
   }
 
-  const origin =
-    (await headers()).get("origin") ?? process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  const headerList = await headers();
+  const appBaseUrl = getAppBaseUrl(headerList);
+  const callbackUrl = new URL("/auth/callback", appBaseUrl);
+  if (next && next !== "/") {
+    callbackUrl.searchParams.set("next", next);
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({
@@ -76,7 +82,7 @@ export async function signup(
     options: {
       // Consumed by public.handle_new_user() to populate public.profiles.
       data: { full_name: fullName },
-      emailRedirectTo: `${origin}/auth/callback`,
+      emailRedirectTo: callbackUrl.toString(),
     },
   });
 
@@ -92,5 +98,5 @@ export async function signup(
   }
 
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect(next);
 }

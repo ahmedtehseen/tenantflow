@@ -1,10 +1,12 @@
 "use client";
 
 import { useActionState } from "react";
+import { useSearchParams } from "next/navigation";
 import { signup, type AuthFormState } from "../actions";
 import { Field, FormAlert, SubmitButton } from "../_components/form-controls";
 
 export function SignupForm() {
+  const searchParams = useSearchParams();
   const [state, formAction] = useActionState<AuthFormState, FormData>(signup, {});
 
   if (state.message) {
@@ -13,6 +15,7 @@ export function SignupForm() {
 
   return (
     <form action={formAction} className="space-y-4" noValidate>
+      <input type="hidden" name="next" value={searchParams.get("next") ?? ""} />
       {state.error && <FormAlert tone="error">{state.error}</FormAlert>}
       <Field
         label="Full name"
