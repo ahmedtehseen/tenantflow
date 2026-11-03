@@ -1,6 +1,11 @@
-import type { TicketStatus, OrgRole } from "@/types/database";
+import type {
+  TicketStatus,
+  OrgRole,
+  TicketPriority,
+  TicketActivityInsert,
+} from "@/types/database";
 
-export type { TicketStatus, OrgRole };
+export type { TicketStatus, OrgRole, TicketPriority, TicketActivityInsert };
 
 export interface TicketActorContext {
   id: string;
@@ -205,4 +210,157 @@ export function canReassignTicket(
       "You do not have permission to reassign this ticket. Only the assignee, author, or workspace admins can change the assignee.",
   };
 }
+
+/**
+ * Validates whether an actor can update ticket properties, reassignment, and status transition.
+ */
+export function validateTicketUpdateRBAC(
+  ticket: TicketLifecycleTarget,
+  newData: {
+    status: TicketStatus;
+    assigned_to: string | null;
+  },
+  actor: TicketActorContext,
+): TransitionEvaluation {
+  // 1. General edit permission check
+  const editEval = canEditTicket(ticket, actor);
+  if (!editEval.allowed) {
+    return editEval;
+  }
+
+  // 2. Reassignment permission check if assigned_to changed
+  if (newData.assigned_to !== ticket.assigned_to) {
+    const reassignEval = canReassignTicket(ticket, actor);
+    if (!reassignEval.allowed) {
+      return reassignEval;
+    }
+  }
+
+  // 3. Status transition check if status changed
+  if (newData.status !== ticket.status) {
+    const transitionEval = canTransitionTicket(ticket, newData.status, actor);
+    if (!transitionEval.allowed) {
+      return transitionEval;
+    }
+  }
+
+  return { allowed: true };
+}
+
+export interface BuildTicketDiffActivitiesParams {
+  organizationId: string;
+  ticketId: string;
+  actorId: string | null;
+  current: {
+    status: TicketStatus;
+    priority: TicketPriority;
+    assigned_to: string | null;
+    title: string;
+    description: string | null;
+  };
+  updated: {
+    status: TicketStatus;
+    priority: TicketPriority;
+    assigned_to: string | null;
+    title: string;
+    description: string | null;
+  };
+}
+
+export function buildTicketDiffActivities(
+  params: BuildTicketDiffActivitiesParams,
+): TicketActivityInsert[] {
+  const activities: TicketActivityInsert[] = [];
+  const { organizationId, ticketId, actorId, current, updated } = params;
+
+  if (updated.status !== current.status) {
+    activities.push({
+      organization_id: organizationId,
+      ticket_id: ticketId,
+      actor_id: actorId,
+      activity_type: "status_changed",
+      old_value: current.status,
+      new_value: updated.status,
+    });
+  }
+
+  if (updated.priority !== current.priority) {
+    activities.push({
+      organization_id: organizationId,
+      ticket_id: ticketId,
+      actor_id: actorId,
+      activity_type: "priority_changed",
+      old_value: current.priority,
+      new_value: updated.priority,
+    });
+  }
+
+  if (updated.assigned_to !== current.assigned_to) {
+    activities.push({
+      organization_id: organizationId,
+      ticket_id: ticketId,
+      actor_id: actorId,
+      activity_type: "assignee_changed",
+      old_value: current.assigned_to,
+      new_value: updated.assigned_to,
+    });
+  }
+
+  if (
+    updated.title !== current.title ||
+    (updated.description || null) !== (current.description || null)
+  ) {
+    activities.push({
+      organization_id: organizationId,
+      ticket_id: ticketId,
+      actor_id: actorId,
+      activity_type: "details_updated",
+      old_value: null,
+      new_value: null,
+      metadata: { title_changed: updated.title !== current.title },
+    });
+  }
+
+  return activities;
+}
+
+export function buildTicketCreatedActivity(params: {
+  organizationId: string;
+  ticketId: string;
+  actorId: string | null;
+  status: TicketStatus;
+  priority?: TicketPriority;
+  assigned_to?: string | null;
+}): TicketActivityInsert {
+  return {
+    organization_id: params.organizationId,
+    ticket_id: params.ticketId,
+    actor_id: params.actorId,
+    activity_type: "created",
+    old_value: null,
+    new_value: params.status,
+    metadata: {
+      priority: params.priority,
+      assigned_to: params.assigned_to,
+    },
+  };
+}
+
+export function buildTicketStatusChangedActivity(params: {
+  organizationId: string;
+  ticketId: string;
+  actorId: string | null;
+  oldStatus: TicketStatus;
+  newStatus: TicketStatus;
+}): TicketActivityInsert {
+  return {
+    organization_id: params.organizationId,
+    ticket_id: params.ticketId,
+    actor_id: params.actorId,
+    activity_type: "status_changed",
+    old_value: params.oldStatus,
+    new_value: params.newStatus,
+  };
+}
+
 

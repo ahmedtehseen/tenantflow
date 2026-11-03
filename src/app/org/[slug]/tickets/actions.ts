@@ -4,7 +4,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantContext, assertTenantScoping } from "@/lib/data/tenant";
-import { canTransitionTicket } from "@/lib/tickets/lifecycle";
+import {
+  canTransitionTicket,
+  canEditTicket,
+  canReassignTicket,
+  buildTicketDiffActivities,
+  buildTicketCreatedActivity,
+  buildTicketStatusChangedActivity,
+} from "@/lib/tickets/lifecycle";
 import type { TicketStatus, TicketPriority } from "@/types/database";
 
 export interface TicketActionState {
@@ -114,6 +121,17 @@ export async function createTicketAction(
     return { error: error.message || "Failed to create ticket." };
   }
 
+  await supabase.from("ticket_activities").insert(
+    buildTicketCreatedActivity({
+      organizationId: orgId,
+      ticketId: newTicket.id,
+      actorId: user.id,
+      status: validation.data.status,
+      priority: validation.data.priority,
+      assigned_to: validation.data.assigned_to,
+    }),
+  );
+
   revalidatePath(`/org/${orgSlug}/tickets`);
   revalidatePath(`/org/${orgSlug}`);
   redirect(`/org/${orgSlug}/tickets/${newTicket.id}`);
@@ -146,13 +164,33 @@ export async function updateTicketAction(
 
   const { data: ticket, error: fetchError } = await supabase
     .from("tickets")
-    .select("id, status, created_by, assigned_to")
+    .select("id, status, priority, title, description, created_by, assigned_to")
     .eq("id", ticketId)
     .eq("organization_id", orgId)
     .maybeSingle();
 
   if (fetchError || !ticket) {
     return { error: "Ticket not found." };
+  }
+
+  const editEval = canEditTicket(ticket, {
+    id: user.id,
+    role: context.currentRole,
+  });
+  if (!editEval.allowed) {
+    return { error: editEval.reason || "You do not have permission to edit this ticket." };
+  }
+
+  if (validation.data.assigned_to !== ticket.assigned_to) {
+    const reassignEval = canReassignTicket(ticket, {
+      id: user.id,
+      role: context.currentRole,
+    });
+    if (!reassignEval.allowed) {
+      return {
+        error: reassignEval.reason || "You do not have permission to reassign this ticket.",
+      };
+    }
   }
 
   if (validation.data.status !== ticket.status) {
@@ -180,6 +218,18 @@ export async function updateTicketAction(
 
   if (error) {
     return { error: error.message || "Failed to update ticket." };
+  }
+
+  const activitiesToInsert = buildTicketDiffActivities({
+    organizationId: orgId,
+    ticketId,
+    actorId: user.id,
+    current: ticket,
+    updated: validation.data,
+  });
+
+  if (activitiesToInsert.length > 0) {
+    await supabase.from("ticket_activities").insert(activitiesToInsert);
   }
 
   revalidatePath(`/org/${orgSlug}/tickets/${ticketId}`);
@@ -239,6 +289,16 @@ export async function updateTicketStatusAction(
   if (error) {
     return { error: error.message || "Failed to update status." };
   }
+
+  await supabase.from("ticket_activities").insert(
+    buildTicketStatusChangedActivity({
+      organizationId: orgId,
+      ticketId,
+      actorId: user.id,
+      oldStatus: ticket.status,
+      newStatus,
+    }),
+  );
 
   revalidatePath(`/org/${orgSlug}/tickets/${ticketId}`);
   revalidatePath(`/org/${orgSlug}/tickets`);
