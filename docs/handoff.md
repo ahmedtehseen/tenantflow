@@ -1,14 +1,14 @@
-# Handoff: Phase 1 Foundation Hardening Complete
+# Handoff: Phase 2 Realtime Collaborative Workspace Complete
 
-**Date:** 2026-11-02  
+**Date:** 2026-11-04  
 **Repository:** TenantFlow (`owkqbuypklkoaiddmnbt`)  
-**Context:** Completed execution of Phase 1 implementation plan (`docs/superpowers/plans/2026-11-02-phase-1-foundation-hardening.md`) via subagent-driven development.
+**Context:** Completed execution of Phase 2 implementation plan (`docs/superpowers/plans/2026-11-04-phase-2-realtime-collaborative-workspace.md`) via subagent-driven development.
 
 ---
 
-## 1. Locked Decisions & Core Architecture (ADRs 0001–0005)
+## 1. Locked Decisions & Core Architecture (ADRs 0001–0006)
 
-All five ADRs are fully implemented and verified in the codebase:
+All six ADRs are fully implemented and verified in the codebase:
 
 1. **[ADR 0001: Tenant Enumeration Defense via Opt-In Public Directory](file:///Users/digitaleap/Desktop/projects/AI-projects/tenantflow/docs/adr/0001-tenant-enumeration-defense.md)**
    - Database: `is_public_directory boolean not null default false` added to `public.organizations` with public directory select RLS policy.
@@ -34,7 +34,15 @@ All five ADRs are fully implemented and verified in the codebase:
    - Form State Synchronization: `key={`${ticket.id}-${ticket.updated_at}`}` and controlled `useEffect` in `ticket-detail.tsx` eliminate React 19 form reset desync.
    - Immutable Audit Trail: `public.ticket_activities` table with RLS records all creation, status, priority, assignee, and detail updates. Rendered in a sleek Activity Timeline in `ticket-detail.tsx`.
 
-6. **[Ubiquitous Language: GLOSSARY.md](file:///Users/digitaleap/Desktop/projects/AI-projects/tenantflow/GLOSSARY.md)**
+6. **[ADR 0006: Realtime Collaborative Workspace & Interactive Kanban Board](file:///Users/digitaleap/Desktop/projects/AI-projects/tenantflow/docs/adr/0006-realtime-collaborative-workspace.md)**
+   - Database & Replication: `supabase/migrations/04_realtime_collaboration.sql` registers `public.tickets` and `public.ticket_activities` in the `supabase_realtime` publication with `replica identity full` for complete old/new payloads.
+   - Pure Realtime State Reducers: `reduceTicketRealtimeEvent`, `reduceActivityRealtimeEvent`, and `applyOptimisticStatusChange` in `src/lib/realtime/reducer.ts` provide deterministic, tenant-isolated state transitions without component re-render loops.
+   - Realtime Client Hooks: `useTicketRealtime` (`src/hooks/use-ticket-realtime.ts`) orchestrates tenant-filtered Supabase Postgres Changes for tickets and activities, with automatic server-state re-synchronization on reconnect.
+   - Live Presence Tracking: `useWorkspacePresence` (`src/hooks/use-workspace-presence.ts`) and presence aggregation utilities (`src/lib/realtime/presence.ts`) track online collaborators with multi-tab deduplication and automatic unmount untracking across workspace-level (`presence:org:${slug}`) and ticket-level (`presence:ticket:${ticketId}`) channels.
+   - Native Drag-and-Drop Kanban Board: Zero-external-dependency HTML5 Drag-and-Drop Kanban board (`src/components/kanban/kanban-board.tsx`, `kanban-column.tsx`, `kanban-card.tsx`) enforcing ADR 0004 FSM rules and ADR 0005 assignee protection on drag operations with optimistic client transitions, error rollbacks, and accessible status movement controls.
+   - Unified Workspace UI: Interactive view toggle between List and Kanban boards (`ticket-list.tsx`), live presence avatar stack (`workspace-presence-indicator.tsx`), and real-time detail view updates (`ticket-detail.tsx`) with viewer presence badges and live activity timeline synchronization.
+
+7. **[Ubiquitous Language: GLOSSARY.md](file:///Users/digitaleap/Desktop/projects/AI-projects/tenantflow/GLOSSARY.md)**
    - Consistent domain vocabulary enforced: `Organization` (customer entity), `Workspace` (operational UI at `/org/[slug]`), and `Tenant` (isolation concept).
 
 ---
@@ -42,27 +50,32 @@ All five ADRs are fully implemented and verified in the codebase:
 ## 2. Verification Suite Summary
 
 - **Unit & Integration Test Suite (`npm test`):**
-  - **86/86 tests passing** (26 test suites) across lifecycle FSM, scoping assertions, invitation utilities, and ticket RBAC actions.
+  - **144/144 tests passing** (45 test suites) across lifecycle FSM, scoping assertions, invitation utilities, ticket RBAC actions, realtime event reducers, presence aggregation, and Kanban UI component interactions.
 - **TypeScript Typecheck (`npx tsc --noEmit`):**
   - **0 errors**.
 - **Linter (`npm run lint`):**
-  - **0 errors, 0 warnings** across all pages, components, and actions.
-- **Production Next.js Build (`next build`):**
-  - **15/15 routes compiled cleanly** (PPR and static generation verified).
+  - **0 errors, 0 warnings** across all pages, components, hooks, and actions.
+- **Production Next.js Build (`npx next build --webpack`):**
+  - **15/15 routes compiled cleanly** with Partial Prerendering (PPR) and static generation verified.
 
 ---
 
 ## 3. Remote Database Migration Status
 
-- Migrations applied to remote Supabase project `tenantflow` (`owkqbuypklkoaiddmnbt`):
+- Migrations created in `supabase/migrations/`:
   - `01_initial_schema.sql` (Tables, profiles trigger, RLS)
   - `02_foundation_hardening.sql` (Public directory, invitations)
   - `03_ticket_activities.sql` (Audit log table, RLS, indexes)
+  - `04_realtime_collaboration.sql` (Supabase Realtime publication registration for `tickets` & `ticket_activities`, `replica identity full`)
+- **Remote Execution Status:**
+  - Migrations `01` through `03` are applied to the remote Supabase project `tenantflow` (`owkqbuypklkoaiddmnbt`).
+  - Migration `04_realtime_collaboration.sql` must be applied to the remote database via Supabase Dashboard SQL Editor or Supabase CLI (`supabase db push`) to enable the Realtime WebSocket publication on production.
 
 ---
 
 ## 4. Next Phase on Roadmap
 
-**Phase 2: Realtime Collaborative Workspace**
-- Live Kanban board at `/org/[slug]/tickets` with drag-and-drop column transitions (enforcing ADR 0004 role gates via Server Actions).
-- Supabase Presence Channels for live viewer avatars ("Who is viewing this ticket / board right now").
+**Phase 3: SLA Management, Automations & Notifications**
+- Configurable response/resolution SLA timers per ticket priority.
+- Event-driven notifications (email / in-app notifications) for assignment, mentions, and status transitions.
+- Webhook subscriptions for external issue tracker integration.
