@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useCallback } from "react";
 import Link from "next/link";
 import {
   Search,
@@ -15,7 +15,17 @@ import { TicketStatusBadge } from "./ticket-status-badge";
 import { TicketPriorityBadge } from "./ticket-priority-badge";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Select } from "@/components/ui/select";
-import { deleteTicketAction } from "../actions";
+import { KanbanBoard } from "./kanban-board";
+import { ViewModeToggle, type ViewMode } from "./view-mode-toggle";
+import { PresenceAvatars } from "./presence-avatars";
+import { useTicketRealtime } from "@/hooks/use-ticket-realtime";
+import { useWorkspacePresence } from "@/hooks/use-workspace-presence";
+import {
+  optimisticTicketStatusTransition,
+  revertOptimisticTicketStatus,
+  type TicketMemberInfo,
+} from "@/lib/realtime/ticket-events";
+import { deleteTicketAction, updateTicketStatusAction } from "../actions";
 import type { TicketStatus, TicketPriority, OrgRole } from "@/types/database";
 
 export interface TicketItem {
@@ -46,23 +56,30 @@ export interface MemberOption {
   email: string;
 }
 
-interface TicketListProps {
+export interface TicketListProps {
   tickets: TicketItem[];
   members: MemberOption[];
   orgId: string;
   orgSlug: string;
   callerUserId: string;
   callerRole: OrgRole;
+  callerEmail?: string;
+  callerName?: string | null;
+  initialView?: ViewMode;
 }
 
 export function TicketList({
-  tickets,
+  tickets: initialTickets,
   members,
   orgId,
   orgSlug,
   callerUserId,
   callerRole,
+  callerEmail,
+  callerName,
+  initialView = "list",
 }: TicketListProps) {
+  const [activeView, setActiveView] = useState<ViewMode>(initialView);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
@@ -70,6 +87,68 @@ export function TicketList({
 
   const [ticketToDelete, setTicketToDelete] = useState<TicketItem | null>(null);
   const [isDeleting, startDeleteTransition] = useTransition();
+
+  // Stable member map for realtime event resolution
+  const memberMap = useMemo(() => {
+    const map = new Map<string, TicketMemberInfo>();
+    members.forEach((m) => {
+      map.set(m.user_id, {
+        id: m.user_id,
+        full_name: m.full_name,
+        email: m.email,
+      });
+    });
+    return map;
+  }, [members]);
+
+  // Realtime ticket updates
+  const { tickets, setTickets } = useTicketRealtime({
+    orgId,
+    initialTickets,
+    memberMap,
+  });
+
+  // Realtime workspace presence tracking
+  const { onlineUsers } = useWorkspacePresence({
+    orgId,
+    currentUser: {
+      id: callerUserId,
+      email: callerEmail || "",
+      full_name: callerName ?? null,
+      role: callerRole,
+    },
+    currentView: activeView,
+  });
+
+  // Optimistic status transition with automatic rollback on error
+  const handleKanbanStatusChange = useCallback(
+    async (ticketId: string, nextStatus: TicketStatus) => {
+      const previousTicket = tickets.find((t) => t.id === ticketId);
+      if (!previousTicket) return { error: "Ticket not found" };
+      const previousStatus = previousTicket.status;
+
+      // Optimistic update
+      setTickets((current) =>
+        optimisticTicketStatusTransition(current, ticketId, nextStatus),
+      );
+
+      const res = await updateTicketStatusAction(
+        ticketId,
+        orgId,
+        orgSlug,
+        nextStatus,
+      );
+      if (res?.error) {
+        // Revert on error
+        setTickets((current) =>
+          revertOptimisticTicketStatus(current, ticketId, previousStatus),
+        );
+        return { error: res.error };
+      }
+      return { success: res?.success || "Status updated" };
+    },
+    [tickets, orgId, orgSlug, setTickets],
+  );
 
   // Metrics
   const metrics = useMemo(() => {
@@ -83,7 +162,7 @@ export function TicketList({
     };
   }, [tickets]);
 
-  // Filtering
+  // Filtering: search, priority, and assignee shared across views; status applies to List view
   const filteredTickets = useMemo(() => {
     return tickets.filter((ticket) => {
       // Search text match
@@ -95,8 +174,12 @@ export function TicketList({
         if (!matchesTitle && !matchesDesc) return false;
       }
 
-      // Status match
-      if (statusFilter !== "all" && ticket.status !== statusFilter) {
+      // Status match (only evaluated in list view; Kanban columns display all statuses)
+      if (
+        activeView === "list" &&
+        statusFilter !== "all" &&
+        ticket.status !== statusFilter
+      ) {
         return false;
       }
 
@@ -124,7 +207,15 @@ export function TicketList({
 
       return true;
     });
-  }, [tickets, search, statusFilter, priorityFilter, assigneeFilter, callerUserId]);
+  }, [
+    tickets,
+    search,
+    activeView,
+    statusFilter,
+    priorityFilter,
+    assigneeFilter,
+    callerUserId,
+  ]);
 
   const handleDeleteConfirm = () => {
     if (!ticketToDelete) return;
@@ -165,9 +256,12 @@ export function TicketList({
 
         <button
           type="button"
-          onClick={() => setStatusFilter("open")}
+          onClick={() => {
+            setStatusFilter("open");
+            setActiveView("list");
+          }}
           className={`flex flex-col rounded-xl border p-3.5 text-left transition cursor-pointer ${
-            statusFilter === "open"
+            statusFilter === "open" && activeView === "list"
               ? "border-blue-600 bg-blue-50/40 dark:border-blue-500 dark:bg-blue-950/30"
               : "border-zinc-200/80 bg-white hover:bg-zinc-50 dark:border-zinc-800/80 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
           }`}
@@ -182,9 +276,12 @@ export function TicketList({
 
         <button
           type="button"
-          onClick={() => setStatusFilter("in_progress")}
+          onClick={() => {
+            setStatusFilter("in_progress");
+            setActiveView("list");
+          }}
           className={`flex flex-col rounded-xl border p-3.5 text-left transition cursor-pointer ${
-            statusFilter === "in_progress"
+            statusFilter === "in_progress" && activeView === "list"
               ? "border-amber-600 bg-amber-50/40 dark:border-amber-500 dark:bg-amber-950/30"
               : "border-zinc-200/80 bg-white hover:bg-zinc-50 dark:border-zinc-800/80 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
           }`}
@@ -199,9 +296,12 @@ export function TicketList({
 
         <button
           type="button"
-          onClick={() => setStatusFilter("resolved")}
+          onClick={() => {
+            setStatusFilter("resolved");
+            setActiveView("list");
+          }}
           className={`flex flex-col rounded-xl border p-3.5 text-left transition cursor-pointer ${
-            statusFilter === "resolved"
+            statusFilter === "resolved" && activeView === "list"
               ? "border-emerald-600 bg-emerald-50/40 dark:border-emerald-500 dark:bg-emerald-950/30"
               : "border-zinc-200/80 bg-white hover:bg-zinc-50 dark:border-zinc-800/80 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
           }`}
@@ -215,84 +315,109 @@ export function TicketList({
         </button>
       </div>
 
-      {/* Filter & Search Toolbar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-zinc-200/80 bg-white p-3.5 shadow-2xs dark:border-zinc-800/80 dark:bg-zinc-900">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-2.5 size-4 text-zinc-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tickets by title or description..."
-            className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 py-2 pl-9 pr-8 text-xs text-zinc-900 outline-none transition focus:border-indigo-600 focus:bg-white dark:border-zinc-800 dark:bg-zinc-950/50 dark:text-zinc-100 dark:focus:bg-zinc-900"
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch("")}
-              className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-600"
+      {/* Filter, Search & Presence Toolbar */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-zinc-200/80 bg-white p-3.5 shadow-2xs dark:border-zinc-800/80 dark:bg-zinc-900">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-2.5 size-4 text-zinc-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search tickets by title or description..."
+              className="w-full rounded-lg border border-zinc-200 bg-zinc-50/50 py-2 pl-9 pr-8 text-xs text-zinc-900 outline-none transition focus:border-indigo-600 focus:bg-white dark:border-zinc-800 dark:bg-zinc-950/50 dark:text-zinc-100 dark:focus:bg-zinc-900"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-2.5 text-zinc-400 hover:text-zinc-600"
+              >
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Live Presence Avatars */}
+            <PresenceAvatars users={onlineUsers} />
+
+            <div className="hidden h-5 w-px bg-zinc-200 sm:block dark:bg-zinc-800" />
+
+            {/* View Mode Toggle */}
+            <ViewModeToggle
+              currentView={activeView}
+              onViewChange={setActiveView}
+            />
+
+            {/* Status Filter (Active only in list view) */}
+            {activeView === "list" && (
+              <Select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="py-2 text-xs"
+              >
+                <option value="all">All Statuses</option>
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="resolved">Resolved</option>
+                <option value="closed">Closed</option>
+              </Select>
+            )}
+
+            {/* Priority Filter */}
+            <Select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="py-2 text-xs"
             >
-              <X className="size-4" />
-            </button>
-          )}
-        </div>
+              <option value="all">All Priorities</option>
+              <option value="urgent">Urgent</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </Select>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Status Filter */}
-          <Select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="py-2 text-xs"
-          >
-            <option value="all">All Statuses</option>
-            <option value="open">Open</option>
-            <option value="in_progress">In Progress</option>
-            <option value="resolved">Resolved</option>
-            <option value="closed">Closed</option>
-          </Select>
+            {/* Assignee Filter */}
+            <Select
+              value={assigneeFilter}
+              onChange={(e) => setAssigneeFilter(e.target.value)}
+              className="py-2 text-xs"
+            >
+              <option value="all">All Assignees</option>
+              <option value="me">Assigned to Me</option>
+              <option value="unassigned">Unassigned</option>
+              {members.map((m) => (
+                <option key={m.user_id} value={m.user_id}>
+                  {m.full_name || m.email}
+                </option>
+              ))}
+            </Select>
 
-          {/* Priority Filter */}
-          <Select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value)}
-            className="py-2 text-xs"
-          >
-            <option value="all">All Priorities</option>
-            <option value="urgent">Urgent</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </Select>
-
-          {/* Assignee Filter */}
-          <Select
-            value={assigneeFilter}
-            onChange={(e) => setAssigneeFilter(e.target.value)}
-            className="py-2 text-xs"
-          >
-            <option value="all">All Assignees</option>
-            <option value="me">Assigned to Me</option>
-            <option value="unassigned">Unassigned</option>
-            {members.map((m) => (
-              <option key={m.user_id} value={m.user_id}>
-                {m.full_name || m.email}
-              </option>
-            ))}
-          </Select>
-
-          {/* Create Button */}
-          <Link
-            href={`/org/${orgSlug}/tickets/new`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-medium text-white shadow-2xs hover:bg-indigo-500 transition"
-          >
-            <Plus className="size-3.5" />
-            <span>New Ticket</span>
-          </Link>
+            {/* Create Button */}
+            <Link
+              href={`/org/${orgSlug}/tickets/new`}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-medium text-white shadow-2xs hover:bg-indigo-500 transition"
+            >
+              <Plus className="size-3.5" />
+              <span>New Ticket</span>
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* Ticket Rows */}
-      {filteredTickets.length > 0 ? (
+      {/* Main View: Kanban Board vs Table / List */}
+      {activeView === "kanban" ? (
+        <KanbanBoard
+          tickets={filteredTickets}
+          members={members}
+          orgId={orgId}
+          orgSlug={orgSlug}
+          callerUserId={callerUserId}
+          callerRole={callerRole}
+          onStatusChange={handleKanbanStatusChange}
+        />
+      ) : filteredTickets.length > 0 ? (
         <div className="rounded-2xl border border-zinc-200/80 bg-white shadow-2xs dark:border-zinc-800/80 dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden">
           {filteredTickets.map((ticket) => {
             const authorName =

@@ -3,17 +3,21 @@ import { Ticket as TicketIcon, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantContext } from "@/lib/data/tenant";
 import { TicketList, type TicketItem, type MemberOption } from "./_components/ticket-list";
+import { resolveViewMode } from "./_components/view-mode-toggle";
 
 interface TicketsPageProps {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ view?: string }>;
 }
 
-export default async function TicketsPage({ params }: TicketsPageProps) {
+export default async function TicketsPage({ params, searchParams }: TicketsPageProps) {
   const { slug } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const initialView = resolveViewMode(resolvedSearchParams?.view);
   const supabase = await createClient();
 
   // Instant in-memory cache hit from layout
-  const { user, currentOrg: org, currentRole } = await getTenantContext(slug);
+  const { user, currentOrg: org, currentRole, profile } = await getTenantContext(slug);
 
   // Parallel database queries for members & tickets
   const [membersResult, ticketsResult] = await Promise.all([
@@ -42,17 +46,17 @@ export default async function TicketsPage({ params }: TicketsPageProps) {
   const memberOptions: MemberOption[] = [];
 
   membersData.forEach((m) => {
-    const profile = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
-    if (profile) {
+    const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+    if (p) {
       memberMap.set(m.user_id, {
-        id: profile.id,
-        full_name: profile.full_name,
-        email: profile.email,
+        id: p.id,
+        full_name: p.full_name,
+        email: p.email,
       });
       memberOptions.push({
         user_id: m.user_id,
-        full_name: profile.full_name,
-        email: profile.email,
+        full_name: p.full_name,
+        email: p.email,
       });
     }
   });
@@ -88,7 +92,7 @@ export default async function TicketsPage({ params }: TicketsPageProps) {
         </Link>
       </div>
 
-      {/* Ticket List with Filters, Search, and Status Transitioning */}
+      {/* Ticket List with Filters, Search, Presence, and Kanban View Switcher */}
       <TicketList
         tickets={tickets}
         members={memberOptions}
@@ -96,6 +100,9 @@ export default async function TicketsPage({ params }: TicketsPageProps) {
         orgSlug={org.slug}
         callerUserId={user.id}
         callerRole={currentRole}
+        callerEmail={user.email || profile?.email || ""}
+        callerName={profile?.full_name ?? null}
+        initialView={initialView}
       />
     </div>
   );
