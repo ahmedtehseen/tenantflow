@@ -50,6 +50,15 @@ Ubiquitous language for TenantFlow domain models, access controls, and multi-ten
   - `closed` &rarr; `open` (Admin or Owner only)
 - **Invariants:** Must belong to exactly one organization; assignee (if present) must be an active member of that same organization. Direct jumps between non-adjacent states (e.g. `open` &rarr; `closed`) are prohibited.
 
+#### Realtime Workspace
+- **Definition:** The interactive, live-synchronized collaboration environment for an organization accessible at `/org/[slug]`. Propagates ticket mutations (inserts, updates, deletes) instantaneously across connected clients via Supabase Realtime WebSocket channels without manual page reloads (ADR 0006).
+
+#### Kanban Board
+- **Definition:** A visual, column-oriented ticket workspace displaying tickets categorized by status (`open`, `in_progress`, `resolved`, `closed`). Supports drag-and-drop status transitions with client-side FSM validation (ADR 0004), RBAC checks (ADR 0005), and optimistic rollback on server rejection (ADR 0006).
+
+#### Presence
+- **Definition:** Real-time collaborative awareness tracking which teammates are actively browsing an organization's workspace or viewing a specific ticket (`PresenceUser`). Synchronized via Supabase Presence channels and deduplicated by user ID across multiple open tabs or windows (ADR 0006).
+
 ---
 
 ### Architectural & Security Patterns

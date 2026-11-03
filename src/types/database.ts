@@ -175,3 +175,27 @@ export interface Database {
     };
   };
 }
+
+// -----------------------------------------------------------------------------
+// Realtime Collaboration & Presence Types (ADR 0006)
+// -----------------------------------------------------------------------------
+
+export interface PresenceUser {
+  userId: string;
+  email: string;
+  fullName: string | null;
+  role: OrgRole;
+  avatarUrl?: string | null;
+  currentView?: "list" | "kanban" | "ticket";
+  viewingTicketId?: string | null;
+  onlineAt: string;
+}
+
+export type RealtimeTicketEvent = {
+  eventType: "INSERT" | "UPDATE" | "DELETE";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  new: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  old: Record<string, any>;
+};
+
