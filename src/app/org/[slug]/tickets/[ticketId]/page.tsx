@@ -16,7 +16,7 @@ export default async function TicketDetailPage({
   const supabase = await createClient();
 
   // Instant in-memory cache hit from layout
-  const { user, currentOrg: org, currentRole } = await getTenantContext(slug);
+  const { user, currentOrg: org, currentRole, profile } = await getTenantContext(slug);
 
   // Parallel fetch: ticket, organization members, and ticket activities
   const [ticketResult, membersResult, activitiesResult] = await Promise.all([
@@ -139,6 +139,8 @@ export default async function TicketDetailPage({
       orgSlug={org.slug}
       callerUserId={user.id}
       callerRole={currentRole}
+      callerEmail={user.email || profile?.email || ""}
+      callerName={profile?.full_name ?? null}
     />
   );
 }

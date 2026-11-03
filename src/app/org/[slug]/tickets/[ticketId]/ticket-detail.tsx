@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition, useActionState } from "react";
+import { useState, useEffect, useRef, useTransition, useActionState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -29,6 +29,10 @@ import {
   ActivityTimeline,
   type ActivityItem,
 } from "./_components/activity-timeline";
+import { createClient } from "@/lib/supabase/client";
+import { useWorkspacePresence } from "@/hooks/use-workspace-presence";
+import { filterTicketViewers } from "@/lib/realtime/presence";
+import { PresenceAvatars } from "../_components/presence-avatars";
 
 interface TicketDetailProps {
   ticket: {
@@ -59,6 +63,8 @@ interface TicketDetailProps {
   orgSlug: string;
   callerUserId: string;
   callerRole: OrgRole;
+  callerEmail?: string;
+  callerName?: string | null;
 }
 
 const STATUS_OPTIONS: { value: TicketStatus; label: string }[] = [
@@ -80,47 +86,187 @@ export function TicketDetail({
   orgSlug,
   callerUserId,
   callerRole,
+  callerEmail = "",
+  callerName = null,
 }: TicketDetailProps) {
+  const [currentTicket, setCurrentTicket] = useState(ticket);
   const [title, setTitle] = useState(ticket.title);
   const [description, setDescription] = useState(ticket.description || "");
   const [status, setStatus] = useState<TicketStatus>(ticket.status);
   const [priority, setPriority] = useState<TicketPriority>(ticket.priority);
   const [assignedTo, setAssignedTo] = useState<string>(ticket.assigned_to || "");
+  const [timelineActivities, setTimelineActivities] = useState<ActivityItem[]>(activities);
 
-  const canEdit = canEditTicket(ticket, {
-    id: callerUserId,
-    role: callerRole,
-  }).allowed;
+  // Live workspace presence: broadcast current viewing ticket and view mode
+  const { onlineUsers } = useWorkspacePresence({
+    orgId,
+    currentUser: {
+      id: callerUserId,
+      email: callerEmail,
+      full_name: callerName,
+      role: callerRole,
+    },
+    currentView: "ticket",
+    viewingTicketId: currentTicket.id,
+  });
+
+  const activeTicketViewers = filterTicketViewers(onlineUsers, currentTicket.id);
+  // Exclude current caller from other viewers avatar stack / notice
+  const otherViewers = activeTicketViewers.filter((u) => u.userId !== callerUserId);
+
+  // Keep latest form state in a ref to avoid stale closures in realtime listener
+  const formStateRef = useRef({
+    title,
+    description,
+    status,
+    priority,
+    assignedTo,
+    currentTicket,
+  });
+  useEffect(() => {
+    formStateRef.current = {
+      title,
+      description,
+      status,
+      priority,
+      assignedTo,
+      currentTicket,
+    };
+  }, [title, description, status, priority, assignedTo, currentTicket]);
+
+  const membersRef = useRef<MemberOption[]>(members);
+  useEffect(() => {
+    membersRef.current = members;
+  }, [members]);
+
+  // Realtime subscription for ticket and ticket activities
+  useEffect(() => {
+    if (!ticket.id || !orgId) return;
+
+    const supabase = createClient();
+    const channel = supabase.channel(`org:${orgId}:ticket:${ticket.id}`);
+
+    // Listen to updates on this ticket
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "tickets",
+        filter: `id=eq.${ticket.id}`,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (payload: any) => {
+        if (!payload?.new?.id) return;
+        const incoming = payload.new as TicketDetailProps["ticket"];
+        const latest = formStateRef.current;
+        const prevTicket = latest.currentTicket;
+
+        // Preserve pending edits if user has modified input fields locally
+        if (latest.title === prevTicket.title) {
+          setTitle(incoming.title);
+        }
+        if (latest.description === (prevTicket.description || "")) {
+          setDescription(incoming.description || "");
+        }
+        if (latest.status === prevTicket.status) {
+          setStatus(incoming.status);
+        }
+        if (latest.priority === prevTicket.priority) {
+          setPriority(incoming.priority);
+        }
+        if (latest.assignedTo === (prevTicket.assigned_to || "")) {
+          setAssignedTo(incoming.assigned_to || "");
+        }
+
+        setCurrentTicket(incoming);
+      },
+    );
+
+    // Listen to new activity logs on this ticket
+    channel.on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "ticket_activities",
+        filter: `ticket_id=eq.${ticket.id}`,
+      },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (payload: any) => {
+        if (!payload?.new?.id) return;
+        const raw = payload.new;
+        const actorMember = raw.actor_id
+          ? membersRef.current.find((m) => m.user_id === raw.actor_id)
+          : null;
+
+        const newActivity: ActivityItem = {
+          id: raw.id,
+          ticket_id: raw.ticket_id,
+          organization_id: raw.organization_id,
+          actor_id: raw.actor_id ?? null,
+          activity_type: raw.activity_type,
+          old_value: raw.old_value ?? null,
+          new_value: raw.new_value ?? null,
+          metadata: (raw.metadata || {}) as Record<string, unknown>,
+          created_at: raw.created_at,
+          actor: actorMember
+            ? {
+                id: actorMember.user_id,
+                full_name: actorMember.full_name,
+                email: actorMember.email,
+              }
+            : null,
+        };
+
+        setTimelineActivities((prev) => {
+          if (prev.some((a) => a.id === newActivity.id)) {
+            return prev;
+          }
+          return [newActivity, ...prev];
+        });
+      },
+    );
+
+    channel.subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [ticket.id, orgId]);
 
   // Synchronize local form state when server-refreshed props arrive
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    setCurrentTicket(ticket);
     setTitle(ticket.title);
     setDescription(ticket.description || "");
     setStatus(ticket.status);
     setPriority(ticket.priority);
     setAssignedTo(ticket.assigned_to || "");
-  }, [
-    ticket.title,
-    ticket.description,
-    ticket.status,
-    ticket.priority,
-    ticket.assigned_to,
-    ticket.updated_at,
-  ]);
+  }, [ticket]);
+
+  useEffect(() => {
+    setTimelineActivities(activities);
+  }, [activities]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  const canEdit = canEditTicket(currentTicket, {
+    id: callerUserId,
+    role: callerRole,
+  }).allowed;
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, startDeleteTransition] = useTransition();
 
-  const availableNext = getAvailableNextStatuses(ticket, {
+  const availableNext = getAvailableNextStatuses(currentTicket, {
     id: callerUserId,
     role: callerRole,
   });
 
   const boundUpdateAction = updateTicketAction.bind(
     null,
-    ticket.id,
+    currentTicket.id,
     orgId,
     orgSlug,
   );
@@ -130,17 +276,17 @@ export function TicketDetail({
   );
 
   const canDelete =
-    ticket.created_by === callerUserId ||
+    currentTicket.created_by === callerUserId ||
     callerRole === "owner" ||
     callerRole === "admin";
 
   const handleDelete = () => {
     startDeleteTransition(async () => {
-      await deleteTicketAction(ticket.id, orgId, orgSlug, true);
+      await deleteTicketAction(currentTicket.id, orgId, orgSlug, true);
     });
   };
 
-  const formattedCreated = new Date(ticket.created_at).toLocaleString("en-US", {
+  const formattedCreated = new Date(currentTicket.created_at).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -148,25 +294,47 @@ export function TicketDetail({
     minute: "2-digit",
   });
 
-  const formattedUpdated = new Date(ticket.updated_at).toLocaleString("en-US", {
+  const formattedUpdated = new Date(currentTicket.updated_at).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
   });
+
+  const currentAssignee = currentTicket.assigned_to
+    ? members.find((m) => m.user_id === currentTicket.assigned_to) ||
+      (assigneeProfile?.id === currentTicket.assigned_to ? assigneeProfile : null)
+    : null;
 
   return (
     <div className="space-y-6">
-      {/* Top Bar with back link & delete */}
-      <div className="flex items-center justify-between">
-        <Link
-          href={`/org/${orgSlug}/tickets`}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 transition"
-        >
-          <ArrowLeft className="size-3.5" />
-          Back to Tickets
-        </Link>
+      {/* Top Bar with back link, live viewers & delete */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-4">
+          <Link
+            href={`/org/${orgSlug}/tickets`}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 transition"
+          >
+            <ArrowLeft className="size-3.5" />
+            Back to Tickets
+          </Link>
+
+          {otherViewers.length > 0 && (
+            <div
+              className="flex items-center gap-2 rounded-full border border-indigo-200/80 bg-indigo-50/70 px-2.5 py-1 text-xs text-indigo-700 dark:border-indigo-900/60 dark:bg-indigo-950/40 dark:text-indigo-300 shadow-2xs"
+              role="status"
+              aria-label="Other viewers on this ticket"
+            >
+              <PresenceAvatars users={otherViewers} />
+              <span className="text-[11px] font-medium">
+                {otherViewers.length === 1
+                  ? `${otherViewers[0].fullName || otherViewers[0].email} is viewing this ticket`
+                  : `${otherViewers.length} others viewing this ticket`}
+              </span>
+            </div>
+          )}
+        </div>
 
         {canDelete && (
           <button
@@ -204,18 +372,38 @@ export function TicketDetail({
       )}
 
       {/* Main Form */}
-      <form key={`${ticket.id}-${ticket.updated_at}`} action={formAction}>
+      <form key={currentTicket.id} action={formAction}>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Main ticket body (Left 2 cols) */}
           <div className="lg:col-span-2 space-y-6">
             <div className="rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-2xs dark:border-zinc-800/80 dark:bg-zinc-900 space-y-4">
               <div className="space-y-1.5">
-                <label
-                  htmlFor="title"
-                  className="block text-xs font-semibold text-zinc-900 dark:text-zinc-100"
-                >
-                  Ticket Title
-                </label>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label
+                    htmlFor="title"
+                    className="block text-xs font-semibold text-zinc-900 dark:text-zinc-100"
+                  >
+                    Ticket Title
+                  </label>
+                  <div
+                    className="flex items-center gap-2"
+                    role="region"
+                    aria-label="Active ticket viewers"
+                  >
+                    <PresenceAvatars users={otherViewers} />
+                    {otherViewers.length > 0 ? (
+                      <span className="inline-flex items-center rounded-full bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-950/50 dark:border-indigo-800 dark:text-indigo-300 shadow-2xs">
+                        {otherViewers.length === 1
+                          ? `${otherViewers[0].fullName || otherViewers[0].email} viewing now`
+                          : `${otherViewers.length} viewing now`}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-zinc-400 dark:text-zinc-500 font-medium">
+                        Viewing now
+                      </span>
+                    )}
+                  </div>
+                </div>
                 <input
                   id="title"
                   name="title"
@@ -282,11 +470,11 @@ export function TicketDetail({
                   </p>
                 </div>
                 <span className="inline-flex items-center rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
-                  {activities.length} {activities.length === 1 ? "event" : "events"}
+                  {timelineActivities.length} {timelineActivities.length === 1 ? "event" : "events"}
                 </span>
               </div>
 
-              <ActivityTimeline activities={activities} members={members} />
+              <ActivityTimeline activities={timelineActivities} members={members} />
             </div>
           </div>
 
@@ -318,13 +506,13 @@ export function TicketDetail({
                     <option
                       key={opt.value}
                       value={opt.value}
-                      disabled={opt.value !== ticket.status && !availableNext.includes(opt.value)}
+                      disabled={opt.value !== currentTicket.status && !availableNext.includes(opt.value)}
                     >
                       {opt.label}
                     </option>
                   ))}
                 </Select>
-                {ticket.status === "closed" && (
+                {currentTicket.status === "closed" && (
                   <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                     Reopening closed tickets requires Workspace Admin or Owner authority.
                   </p>
@@ -397,13 +585,22 @@ export function TicketDetail({
                   </span>
                 </div>
 
-                {assigneeProfile && (
+                {currentAssignee ? (
                   <div>
                     <span className="block text-[11px] font-medium text-zinc-400">
                       Assigned To
                     </span>
                     <span className="font-semibold text-zinc-800 dark:text-zinc-200">
-                      {assigneeProfile.full_name || assigneeProfile.email}
+                      {currentAssignee.full_name || currentAssignee.email}
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    <span className="block text-[11px] font-medium text-zinc-400">
+                      Assigned To
+                    </span>
+                    <span className="text-zinc-400 italic">
+                      Unassigned
                     </span>
                   </div>
                 )}
@@ -425,7 +622,7 @@ export function TicketDetail({
                     Ticket ID
                   </span>
                   <span className="font-mono text-[10px] select-all">
-                    {ticket.id}
+                    {currentTicket.id}
                   </span>
                 </div>
               </div>
@@ -446,7 +643,7 @@ export function TicketDetail({
         isOpen={showDeleteModal}
         isLoading={isDeleting}
         title="Delete this ticket?"
-        description={`Are you sure you want to delete "${ticket.title}"? This action cannot be undone.`}
+        description={`Are you sure you want to delete "${currentTicket.title}"? This action cannot be undone.`}
         confirmText="Delete Ticket"
         variant="danger"
         onConfirm={handleDelete}
