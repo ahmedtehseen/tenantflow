@@ -320,3 +320,4 @@ Push commits to `origin main` to trigger Vercel production deployment.
 - [ ] **Step 4: Update handoff documentation**
 
 Update `docs/handoff.md` with the new RBAC rules, activity log schema, and completed verification steps.
+

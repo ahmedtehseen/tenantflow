@@ -6,9 +6,9 @@
 
 ---
 
-## 1. Locked Decisions & Core Architecture (ADRs 0001–0004)
+## 1. Locked Decisions & Core Architecture (ADRs 0001–0005)
 
-All four ADRs are fully implemented and verified in the codebase:
+All five ADRs are fully implemented and verified in the codebase:
 
 1. **[ADR 0001: Tenant Enumeration Defense via Opt-In Public Directory](file:///Users/digitaleap/Desktop/projects/AI-projects/tenantflow/docs/adr/0001-tenant-enumeration-defense.md)**
    - Database: `is_public_directory boolean not null default false` added to `public.organizations` with public directory select RLS policy.
@@ -28,7 +28,13 @@ All four ADRs are fully implemented and verified in the codebase:
    - Enforcement: Enforced in `updateTicketStatusAction` and `updateTicketAction`. Disallowed jumps (e.g. `open` &rarr; `closed`) or unauthorized role actions return descriptive rejection messages.
    - UI: `ticket-detail.tsx` dynamically disables non-permissible status options for the active user and surfaces admin-only reopening requirements when a ticket is closed.
 
-5. **[Ubiquitous Language: GLOSSARY.md](file:///Users/digitaleap/Desktop/projects/AI-projects/tenantflow/GLOSSARY.md)**
+5. **[ADR 0005: Ticket Mutation RBAC and Activity Audit Log](file:///Users/digitaleap/Desktop/projects/AI-projects/tenantflow/docs/adr/0005-ticket-rbac-and-activity-audit-log.md)**
+   - RBAC Guards: `canEditTicket` and `canReassignTicket` in `src/lib/tickets/lifecycle.ts` restrict ticket editing to workspace admins, owners, ticket author, and current assignee. Bystander members are strictly read-only.
+   - Assigned Ticket Protection: Open tickets already assigned to another member cannot be started (`open` &rarr; `in_progress`) by bystander members.
+   - Form State Synchronization: `key={`${ticket.id}-${ticket.updated_at}`}` and controlled `useEffect` in `ticket-detail.tsx` eliminate React 19 form reset desync.
+   - Immutable Audit Trail: `public.ticket_activities` table with RLS records all creation, status, priority, assignee, and detail updates. Rendered in a sleek Activity Timeline in `ticket-detail.tsx`.
+
+6. **[Ubiquitous Language: GLOSSARY.md](file:///Users/digitaleap/Desktop/projects/AI-projects/tenantflow/GLOSSARY.md)**
    - Consistent domain vocabulary enforced: `Organization` (customer entity), `Workspace` (operational UI at `/org/[slug]`), and `Tenant` (isolation concept).
 
 ---
@@ -36,7 +42,7 @@ All four ADRs are fully implemented and verified in the codebase:
 ## 2. Verification Suite Summary
 
 - **Unit & Integration Test Suite (`npm test`):**
-  - **52/52 tests passing** (18 test suites) across lifecycle FSM, scoping assertions, and invitation utilities.
+  - **86/86 tests passing** (26 test suites) across lifecycle FSM, scoping assertions, invitation utilities, and ticket RBAC actions.
 - **TypeScript Typecheck (`npx tsc --noEmit`):**
   - **0 errors**.
 - **Linter (`npm run lint`):**
@@ -48,8 +54,10 @@ All four ADRs are fully implemented and verified in the codebase:
 
 ## 3. Remote Database Migration Status
 
-- Migration file ready: `supabase/migrations/02_foundation_hardening.sql`.
-- Migration pushes to remote Supabase project `tenantflow` (`owkqbuypklkoaiddmnbt`) via `npx supabase db push`. Note: In sandboxed environments without direct outbound network access to the remote database, run `npx supabase db push` outside the sandbox or via CI.
+- Migrations applied to remote Supabase project `tenantflow` (`owkqbuypklkoaiddmnbt`):
+  - `01_initial_schema.sql` (Tables, profiles trigger, RLS)
+  - `02_foundation_hardening.sql` (Public directory, invitations)
+  - `03_ticket_activities.sql` (Audit log table, RLS, indexes)
 
 ---
 

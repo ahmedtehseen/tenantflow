@@ -39,3 +39,4 @@ We adopt strict ticket mutation RBAC, tighten state transitions on assigned tick
 - **Positive:** Provides complete enterprise audit visibility into all ticket modifications.
 - **Positive:** Eliminates UI flicker/desynchronization after saving ticket changes.
 - **Negative:** Reassigning work now requires involvement of the current assignee, author, or an admin, preventing bystander reassignment; this is the intended B2B operational constraint.
+
