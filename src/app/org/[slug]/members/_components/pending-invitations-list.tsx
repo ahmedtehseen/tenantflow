@@ -11,6 +11,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { revokeInvitationAction } from "../../../actions";
+import { getInvitationUrl } from "@/lib/invitations/invitation-utils";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { RoleBadge } from "@/components/ui/role-badge";
 import type { OrgRole, InvitationRole } from "@/types/database";
@@ -47,7 +48,7 @@ export function PendingInvitationsList({
 
   const handleCopy = async (token: string, id: string) => {
     try {
-      const url = `${window.location.origin}/invite/${token}`;
+      const url = getInvitationUrl(token);
       await navigator.clipboard.writeText(url);
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);

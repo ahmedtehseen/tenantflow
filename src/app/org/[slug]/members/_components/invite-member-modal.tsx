@@ -15,6 +15,7 @@ import {
   Link as LinkIcon,
 } from "lucide-react";
 import { createInvitationAction, type ActionState } from "../../../actions";
+import { getInvitationUrl } from "@/lib/invitations/invitation-utils";
 import type { OrgRole, InvitationRole } from "@/types/database";
 
 interface InviteMemberModalProps {
@@ -118,7 +119,7 @@ function InviteDialog({
   const handleCopyLink = async () => {
     if (!state.invitationToken) return;
     try {
-      const fullUrl = `${window.location.origin}/invite/${state.invitationToken}`;
+      const fullUrl = getInvitationUrl(state.invitationToken);
       await navigator.clipboard.writeText(fullUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
@@ -128,9 +129,7 @@ function InviteDialog({
   };
 
   const displayInviteLink = state.invitationToken
-    ? typeof window !== "undefined"
-      ? `${window.location.origin}/invite/${state.invitationToken}`
-      : `/invite/${state.invitationToken}`
+    ? getInvitationUrl(state.invitationToken)
     : "";
 
   return (

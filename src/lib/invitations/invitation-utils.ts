@@ -62,3 +62,34 @@ export function isInvitationActive(invitation: {
 }): boolean {
   return getInvitationStatus(invitation) === "pending";
 }
+
+/**
+ * Resolves the application base URL for generating user-facing links.
+ * 
+ * Order of precedence:
+ * 1. Explicit `NEXT_PUBLIC_APP_URL` environment variable.
+ * 2. If running in a browser:
+ *    - If localhost / 127.0.0.1 -> use window.location.origin (preserves local testing).
+ *    - Otherwise (e.g. Vercel preview or production) -> default to https://tenantflow-alpha.vercel.app
+ *      to avoid Vercel Deployment Protection / SSO login gates on preview URLs.
+ * 3. Fallback to production default https://tenantflow-alpha.vercel.app
+ */
+export function getAppBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
+  }
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return window.location.origin;
+    }
+  }
+  return "https://tenantflow-alpha.vercel.app";
+}
+
+/**
+ * Builds the canonical public invitation URL for a given token.
+ */
+export function getInvitationUrl(token: string): string {
+  return `${getAppBaseUrl()}/invite/${token}`;
+}

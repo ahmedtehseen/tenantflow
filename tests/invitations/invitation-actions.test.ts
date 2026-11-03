@@ -7,6 +7,8 @@ import {
   generateInvitationToken,
   isInvitationActive,
   getInvitationStatus,
+  getAppBaseUrl,
+  getInvitationUrl,
 } from "#invitations/utils";
 import { assertTenantScoping, TenantScopingError } from "#data/scoping";
 
@@ -222,6 +224,40 @@ describe("Token-Based Invitation Engine (ADR 0002 & ADR 0003)", () => {
           return true;
         },
       );
+    });
+  });
+
+  describe("Canonical Application & Invitation URL Resolution", () => {
+    it("defaults to the canonical production URL when NEXT_PUBLIC_APP_URL is unset", () => {
+      const prevEnv = process.env.NEXT_PUBLIC_APP_URL;
+      delete process.env.NEXT_PUBLIC_APP_URL;
+
+      const baseUrl = getAppBaseUrl();
+      assert.equal(baseUrl, "https://tenantflow-alpha.vercel.app");
+
+      const token = "mock-secure-token-12345";
+      assert.equal(
+        getInvitationUrl(token),
+        "https://tenantflow-alpha.vercel.app/invite/mock-secure-token-12345",
+      );
+
+      process.env.NEXT_PUBLIC_APP_URL = prevEnv;
+    });
+
+    it("respects NEXT_PUBLIC_APP_URL when configured", () => {
+      const prevEnv = process.env.NEXT_PUBLIC_APP_URL;
+      process.env.NEXT_PUBLIC_APP_URL = "https://custom-domain.com/";
+
+      const baseUrl = getAppBaseUrl();
+      assert.equal(baseUrl, "https://custom-domain.com");
+
+      const token = "mock-token-xyz";
+      assert.equal(
+        getInvitationUrl(token),
+        "https://custom-domain.com/invite/mock-token-xyz",
+      );
+
+      process.env.NEXT_PUBLIC_APP_URL = prevEnv;
     });
   });
 });
