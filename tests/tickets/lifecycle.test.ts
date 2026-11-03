@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   canTransitionTicket,
+  canEditTicket,
+  canReassignTicket,
   getAvailableNextStatuses,
   FSM_EDGES,
   VALID_STATUSES,
@@ -63,13 +65,37 @@ describe("Ticket Lifecycle Finite State Machine (ADR 0004)", () => {
   });
 
   describe("Transitions from: open", () => {
-    it("allows open -> in_progress for any member, assignee, author, admin, or owner", () => {
-      const ticket = createTicket("open");
+    it("allows open -> in_progress for any member when ticket is unassigned", () => {
+      const ticket = createTicket("open", "user_author", null);
       assert.equal(canTransitionTicket(ticket, "in_progress", bystanderMember).allowed, true);
       assert.equal(canTransitionTicket(ticket, "in_progress", assigneeMember).allowed, true);
       assert.equal(canTransitionTicket(ticket, "in_progress", authorMember).allowed, true);
       assert.equal(canTransitionTicket(ticket, "in_progress", adminActor).allowed, true);
       assert.equal(canTransitionTicket(ticket, "in_progress", ownerActor).allowed, true);
+    });
+
+    it("allows open -> in_progress for assignee, admin, or owner when ticket is assigned", () => {
+      const ticket = createTicket("open", "user_author", "user_assignee");
+      assert.equal(canTransitionTicket(ticket, "in_progress", assigneeMember).allowed, true);
+      assert.equal(canTransitionTicket(ticket, "in_progress", adminActor).allowed, true);
+      assert.equal(canTransitionTicket(ticket, "in_progress", ownerActor).allowed, true);
+    });
+
+    it("rejects open -> in_progress for bystander member when ticket is assigned to another user", () => {
+      const ticket = createTicket("open", "user_author", "user_assignee");
+      const bystanderRes = canTransitionTicket(ticket, "in_progress", bystanderMember);
+      assert.equal(bystanderRes.allowed, false);
+      assert.equal(
+        bystanderRes.reason,
+        "This ticket is assigned to another team member. Only the assignee, workspace admin, or owner can start work on it.",
+      );
+
+      const authorRes = canTransitionTicket(ticket, "in_progress", authorMember);
+      assert.equal(authorRes.allowed, false);
+      assert.equal(
+        authorRes.reason,
+        "This ticket is assigned to another team member. Only the assignee, workspace admin, or owner can start work on it.",
+      );
     });
 
     it("rejects illegal jumps open -> resolved for all roles", () => {
@@ -219,12 +245,21 @@ describe("Ticket Lifecycle Finite State Machine (ADR 0004)", () => {
   });
 
   describe("getAvailableNextStatuses helper", () => {
-    it("returns [in_progress] for any user when ticket is open", () => {
-      const ticket = createTicket("open");
+    it("returns [in_progress] for any user when ticket is open and unassigned", () => {
+      const ticket = createTicket("open", "user_author", null);
       assert.deepEqual(getAvailableNextStatuses(ticket, bystanderMember), ["in_progress"]);
       assert.deepEqual(getAvailableNextStatuses(ticket, assigneeMember), ["in_progress"]);
       assert.deepEqual(getAvailableNextStatuses(ticket, adminActor), ["in_progress"]);
       assert.deepEqual(getAvailableNextStatuses(ticket, ownerActor), ["in_progress"]);
+    });
+
+    it("returns [in_progress] only for assignee, admin, owner when ticket is open and assigned", () => {
+      const ticket = createTicket("open", "user_author", "user_assignee");
+      assert.deepEqual(getAvailableNextStatuses(ticket, assigneeMember), ["in_progress"]);
+      assert.deepEqual(getAvailableNextStatuses(ticket, adminActor), ["in_progress"]);
+      assert.deepEqual(getAvailableNextStatuses(ticket, ownerActor), ["in_progress"]);
+      assert.deepEqual(getAvailableNextStatuses(ticket, bystanderMember), []);
+      assert.deepEqual(getAvailableNextStatuses(ticket, authorMember), []);
     });
 
     it("returns [resolved, open] for assignee, admin, owner when in_progress; [] for bystander/author", () => {
@@ -256,6 +291,78 @@ describe("Ticket Lifecycle Finite State Machine (ADR 0004)", () => {
       assert.deepEqual(getAvailableNextStatuses(ticket, authorMember), []);
       assert.deepEqual(getAvailableNextStatuses(ticket, assigneeMember), []);
       assert.deepEqual(getAvailableNextStatuses(ticket, bystanderMember), []);
+    });
+  });
+
+  describe("canEditTicket RBAC evaluation", () => {
+    it("allows ticket owner", () => {
+      const ticket = createTicket("open");
+      const result = canEditTicket(ticket, ownerActor);
+      assert.equal(result.allowed, true);
+    });
+
+    it("allows workspace admin", () => {
+      const ticket = createTicket("open");
+      const result = canEditTicket(ticket, adminActor);
+      assert.equal(result.allowed, true);
+    });
+
+    it("allows ticket author", () => {
+      const ticket = createTicket("open", "user_author", "user_other");
+      const result = canEditTicket(ticket, authorMember);
+      assert.equal(result.allowed, true);
+    });
+
+    it("allows ticket assignee", () => {
+      const ticket = createTicket("open", "user_other", "user_assignee");
+      const result = canEditTicket(ticket, assigneeMember);
+      assert.equal(result.allowed, true);
+    });
+
+    it("rejects bystander member with clear reason", () => {
+      const ticket = createTicket("open", "user_author", "user_assignee");
+      const result = canEditTicket(ticket, bystanderMember);
+      assert.equal(result.allowed, false);
+      assert.equal(
+        result.reason,
+        "You do not have permission to edit this ticket. Only the assignee, author, or workspace admins can make changes.",
+      );
+    });
+  });
+
+  describe("canReassignTicket RBAC evaluation", () => {
+    it("allows ticket owner", () => {
+      const ticket = createTicket("open");
+      const result = canReassignTicket(ticket, ownerActor);
+      assert.equal(result.allowed, true);
+    });
+
+    it("allows workspace admin", () => {
+      const ticket = createTicket("open");
+      const result = canReassignTicket(ticket, adminActor);
+      assert.equal(result.allowed, true);
+    });
+
+    it("allows ticket author", () => {
+      const ticket = createTicket("open", "user_author", "user_other");
+      const result = canReassignTicket(ticket, authorMember);
+      assert.equal(result.allowed, true);
+    });
+
+    it("allows ticket assignee", () => {
+      const ticket = createTicket("open", "user_other", "user_assignee");
+      const result = canReassignTicket(ticket, assigneeMember);
+      assert.equal(result.allowed, true);
+    });
+
+    it("rejects bystander member with clear reason", () => {
+      const ticket = createTicket("open", "user_author", "user_assignee");
+      const result = canReassignTicket(ticket, bystanderMember);
+      assert.equal(result.allowed, false);
+      assert.equal(
+        result.reason,
+        "You do not have permission to reassign this ticket. Only the assignee, author, or workspace admins can change the assignee.",
+      );
     });
   });
 });

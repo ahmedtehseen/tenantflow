@@ -77,8 +77,14 @@ export function canTransitionTicket(
   const isAuthor = ticket.created_by !== null && ticket.created_by === actor.id;
   const isAssignee = ticket.assigned_to !== null && ticket.assigned_to === actor.id;
 
-  // open -> in_progress: Any workspace member or assignee
+  // open -> in_progress: Any workspace member if unassigned; Assignee, Admin, or Owner if assigned
   if (ticket.status === "open" && targetStatus === "in_progress") {
+    if (ticket.assigned_to !== null && ticket.assigned_to !== actor.id && !isAdmin && !isOwner) {
+      return {
+        allowed: false,
+        reason: "This ticket is assigned to another team member. Only the assignee, workspace admin, or owner can start work on it.",
+      };
+    }
     return { allowed: true };
   }
 
@@ -153,3 +159,50 @@ export function getAvailableNextStatuses(
     (targetStatus) => canTransitionTicket(ticket, targetStatus, actor).allowed,
   );
 }
+
+/**
+ * Validates whether an actor can edit ticket properties (title, description, priority).
+ * Permitted for: Owner, Admin, Ticket Author, Ticket Assignee.
+ */
+export function canEditTicket(
+  ticket: TicketLifecycleTarget,
+  actor: TicketActorContext,
+): TransitionEvaluation {
+  const isOwner = actor.role === "owner";
+  const isAdmin = actor.role === "admin";
+  const isAuthor = ticket.created_by !== null && ticket.created_by === actor.id;
+  const isAssignee = ticket.assigned_to !== null && ticket.assigned_to === actor.id;
+
+  if (isOwner || isAdmin || isAuthor || isAssignee) {
+    return { allowed: true };
+  }
+  return {
+    allowed: false,
+    reason:
+      "You do not have permission to edit this ticket. Only the assignee, author, or workspace admins can make changes.",
+  };
+}
+
+/**
+ * Validates whether an actor can reassign a ticket.
+ * Permitted for: Owner, Admin, Ticket Author, Ticket Assignee.
+ */
+export function canReassignTicket(
+  ticket: TicketLifecycleTarget,
+  actor: TicketActorContext,
+): TransitionEvaluation {
+  const isOwner = actor.role === "owner";
+  const isAdmin = actor.role === "admin";
+  const isAuthor = ticket.created_by !== null && ticket.created_by === actor.id;
+  const isAssignee = ticket.assigned_to !== null && ticket.assigned_to === actor.id;
+
+  if (isOwner || isAdmin || isAuthor || isAssignee) {
+    return { allowed: true };
+  }
+  return {
+    allowed: false,
+    reason:
+      "You do not have permission to reassign this ticket. Only the assignee, author, or workspace admins can change the assignee.",
+  };
+}
+
