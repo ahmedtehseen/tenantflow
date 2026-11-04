@@ -68,8 +68,7 @@ All six ADRs are fully implemented and verified in the codebase:
   - `03_ticket_activities.sql` (Audit log table, RLS, indexes)
   - `04_realtime_collaboration.sql` (Supabase Realtime publication registration for `tickets` & `ticket_activities`, `replica identity full`)
 - **Remote Execution Status:**
-  - Migrations `01` through `03` are applied to the remote Supabase project `tenantflow` (`owkqbuypklkoaiddmnbt`).
-  - Migration `04_realtime_collaboration.sql` must be applied to the remote database via Supabase Dashboard SQL Editor or Supabase CLI (`supabase db push`) to enable the Realtime WebSocket publication on production.
+  - All migrations `01` through `04` (`01_initial_schema.sql`, `02_foundation_hardening.sql`, `03_ticket_activities.sql`, `04_realtime_collaboration.sql`) are fully applied to remote Supabase project `tenantflow` (`owkqbuypklkoaiddmnbt`) via Supabase CLI `supabase db push`. Live replication and replica identity full are active in production.
 
 ---
 
