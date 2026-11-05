@@ -1,17 +1,17 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { resolveViewMode } from "#tickets/view-mode";
 
 describe("View Mode Parameter Resolution", () => {
   it("resolves view mode correctly with fallback to list", () => {
-    const resolveView = (val?: string | null) => (val === "kanban" ? "kanban" : "list");
-    assert.equal(resolveView("kanban"), "kanban");
-    assert.equal(resolveView("list"), "list");
-    assert.equal(resolveView("unknown"), "list");
-    assert.equal(resolveView(undefined), "list");
-    assert.equal(resolveView(null), "list");
-    assert.equal(resolveView(""), "list");
-    assert.equal(resolveView("BOARD"), "list");
-    assert.equal(resolveView("table"), "list");
+    assert.equal(resolveViewMode("kanban"), "kanban");
+    assert.equal(resolveViewMode("list"), "list");
+    assert.equal(resolveViewMode("unknown"), "list");
+    assert.equal(resolveViewMode(undefined), "list");
+    assert.equal(resolveViewMode(null), "list");
+    assert.equal(resolveViewMode(""), "list");
+    assert.equal(resolveViewMode("BOARD"), "list");
+    assert.equal(resolveViewMode("table"), "list");
   });
 
   it("handles URL search parameter parsing for view switching", () => {

@@ -3,7 +3,7 @@ import { Ticket as TicketIcon, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantContext } from "@/lib/data/tenant";
 import { TicketList, type TicketItem, type MemberOption } from "./_components/ticket-list";
-import { resolveViewMode } from "./_components/view-mode-toggle";
+import { resolveViewMode } from "@/lib/tickets/view-mode";
 
 interface TicketsPageProps {
   params: Promise<{ slug: string }>;

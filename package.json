@@ -11,6 +11,7 @@
   },
   "imports": {
     "#tickets/lifecycle": "./src/lib/tickets/lifecycle.ts",
+    "#tickets/view-mode": "./src/lib/tickets/view-mode.ts",
     "#data/scoping": "./src/lib/data/scoping.ts",
     "#invitations/utils": "./src/lib/invitations/invitation-utils.ts",
     "#types/database": "./src/types/database.ts"

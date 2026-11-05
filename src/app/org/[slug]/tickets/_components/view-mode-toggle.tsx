@@ -3,16 +3,9 @@
 import { Suspense, useCallback } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { List, LayoutGrid } from "lucide-react";
+import { resolveViewMode, type ViewMode } from "@/lib/tickets/view-mode";
 
-export type ViewMode = "list" | "kanban";
-
-/**
- * Resolves a URL parameter string into a valid ViewMode ("list" | "kanban"),
- * defaulting to "list".
- */
-export function resolveViewMode(val?: string | null): ViewMode {
-  return val === "kanban" ? "kanban" : "list";
-}
+export { resolveViewMode, type ViewMode };
 
 export interface ViewModeToggleProps {
   currentView?: ViewMode;
