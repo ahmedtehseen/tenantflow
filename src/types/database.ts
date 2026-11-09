@@ -104,6 +104,21 @@ export function getInvitationStatus(invitation: {
 // SLA Policies (ADR Phase 3)
 // -----------------------------------------------------------------------------
 
+export interface SLAPolicyConfig {
+  timezone: string;
+  business_days: number[];
+  business_start_time: string;
+  business_end_time: string;
+  urgent_response_minutes?: number;
+  urgent_resolution_minutes?: number;
+  high_response_minutes?: number;
+  high_resolution_minutes?: number;
+  medium_response_minutes?: number;
+  medium_resolution_minutes?: number;
+  low_response_minutes?: number;
+  low_resolution_minutes?: number;
+}
+
 export interface OrganizationSLAPolicy {
   id: string;
   organization_id: string;
