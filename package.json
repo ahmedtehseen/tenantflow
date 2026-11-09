@@ -15,6 +15,7 @@
     "#data/scoping": "./src/lib/data/scoping.ts",
     "#invitations/utils": "./src/lib/invitations/invitation-utils.ts",
     "#sla/business-hours": "./src/lib/sla/business-hours.ts",
+    "#sla/ticket-sla": "./src/lib/sla/ticket-sla.ts",
     "#types/database": "./src/types/database.ts"
   },
   "dependencies": {

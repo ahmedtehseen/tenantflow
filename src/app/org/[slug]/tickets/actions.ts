@@ -12,6 +12,7 @@ import {
   buildTicketCreatedActivity,
   buildTicketStatusChangedActivity,
 } from "@/lib/tickets/lifecycle";
+import { computeTicketSLADeadlines, evaluateStatusTransitionSLA } from "#sla/ticket-sla";
 import type { TicketStatus, TicketPriority } from "@/types/database";
 
 export interface TicketActionState {
@@ -103,6 +104,17 @@ export async function createTicketAction(
     return { error: validation.error || "Invalid ticket data." };
   }
 
+  // Load organization SLA policy (falls back gracefully if not configured)
+  const { data: slaPolicy } = await supabase
+    .from("organization_sla_policies")
+    .select("*")
+    .eq("organization_id", orgId)
+    .maybeSingle();
+
+  const slaDeadlines = slaPolicy
+    ? computeTicketSLADeadlines(new Date(), validation.data.priority, slaPolicy)
+    : null;
+
   const { data: newTicket, error } = await supabase
     .from("tickets")
     .insert({
@@ -113,6 +125,10 @@ export async function createTicketAction(
       priority: validation.data.priority,
       created_by: user.id,
       assigned_to: validation.data.assigned_to,
+      ...(slaDeadlines && {
+        first_response_due_at: slaDeadlines.first_response_due_at.toISOString(),
+        resolution_due_at: slaDeadlines.resolution_due_at.toISOString(),
+      }),
     })
     .select("id")
     .single();
@@ -164,7 +180,7 @@ export async function updateTicketAction(
 
   const { data: ticket, error: fetchError } = await supabase
     .from("tickets")
-    .select("id, status, priority, title, description, created_by, assigned_to")
+    .select("id, status, priority, title, description, created_by, assigned_to, created_at")
     .eq("id", ticketId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -204,6 +220,28 @@ export async function updateTicketAction(
     }
   }
 
+  // Recalculate SLA deadlines from original created_at if priority changed
+  let slaRecalcUpdate: Record<string, string> = {};
+  if (validation.data.priority !== ticket.priority) {
+    const { data: slaPolicy } = await supabase
+      .from("organization_sla_policies")
+      .select("*")
+      .eq("organization_id", orgId)
+      .maybeSingle();
+
+    if (slaPolicy) {
+      const newDeadlines = computeTicketSLADeadlines(
+        new Date(ticket.created_at),
+        validation.data.priority,
+        slaPolicy,
+      );
+      slaRecalcUpdate = {
+        first_response_due_at: newDeadlines.first_response_due_at.toISOString(),
+        resolution_due_at: newDeadlines.resolution_due_at.toISOString(),
+      };
+    }
+  }
+
   const { error } = await supabase
     .from("tickets")
     .update({
@@ -212,6 +250,7 @@ export async function updateTicketAction(
       status: validation.data.status,
       priority: validation.data.priority,
       assigned_to: validation.data.assigned_to,
+      ...slaRecalcUpdate,
     })
     .eq("id", ticketId)
     .eq("organization_id", orgId);
@@ -262,7 +301,7 @@ export async function updateTicketStatusAction(
 
   const { data: ticket, error: fetchError } = await supabase
     .from("tickets")
-    .select("id, status, created_by, assigned_to")
+    .select("id, status, created_by, assigned_to, first_response_due_at, first_responded_at, resolution_due_at, resolved_at")
     .eq("id", ticketId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -280,9 +319,19 @@ export async function updateTicketStatusAction(
     return { error: evaluation.reason || "Illegal status transition." };
   }
 
+  const slaMilestone = evaluateStatusTransitionSLA({
+    fromStatus: ticket.status,
+    toStatus: newStatus,
+    transitionTime: new Date(),
+    firstResponseDueAt: ticket.first_response_due_at,
+    firstRespondedAt: ticket.first_responded_at,
+    resolutionDueAt: ticket.resolution_due_at,
+    resolvedAt: ticket.resolved_at,
+  });
+
   const { error } = await supabase
     .from("tickets")
-    .update({ status: newStatus })
+    .update({ status: newStatus, ...slaMilestone })
     .eq("id", ticketId)
     .eq("organization_id", orgId);
 
