@@ -200,27 +200,30 @@ security definer
 set search_path = ''
 as $$
 begin
-  insert into public.ticket_activities (
-    organization_id,
-    ticket_id,
-    actor_id,
-    activity_type,
-    old_value,
-    new_value,
-    metadata
-  ) values (
-    old.organization_id,
-    old.ticket_id,
-    (select auth.uid()),
-    'comment_deleted',
-    null,
-    null,
-    jsonb_build_object(
-      'comment_id', old.id,
-      'author_id', old.author_id,
-      'truncated_content', substring(old.content from 1 for 100)
-    )
-  );
+  -- Guard against foreign key violation if parent ticket is being cascade deleted
+  if exists (select 1 from public.tickets where id = old.ticket_id) then
+    insert into public.ticket_activities (
+      organization_id,
+      ticket_id,
+      actor_id,
+      activity_type,
+      old_value,
+      new_value,
+      metadata
+    ) values (
+      old.organization_id,
+      old.ticket_id,
+      (select auth.uid()),
+      'comment_deleted',
+      null,
+      null,
+      jsonb_build_object(
+        'comment_id', old.id,
+        'author_id', old.author_id,
+        'truncated_content', substring(old.content from 1 for 100)
+      )
+    );
+  end if;
   return old;
 end;
 $$;
