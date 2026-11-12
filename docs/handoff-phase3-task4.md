@@ -28,6 +28,8 @@ Migrations `05_phase_3_sla_notifications_webhooks.sql` and `20261112220208_phase
 
 ### Production activation
 
+Follow [the scheduler setup guide](scheduler-setup.md) for secret configuration, deployment, a manual test, and troubleshooting.
+
 Deploy the updated application and configure `CRON_SECRET` in the production environment to activate the scheduled worker. Optional `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` enable the Redis retry index. Pending deliveries remain durable in Supabase when Redis is absent or unavailable.
 
 The November 10 checkpoint and original implementation notes follow.
