@@ -257,6 +257,9 @@ describe("Database Migration 05 Schema Verification (Phase 3)", () => {
       assert.equal(mockWebhook.is_active, true);
 
       const mockDelivery: WebhookDelivery = {
+        event_id: "event-1",
+        claimed_until: null,
+        claim_token: null,
         id: "del-1",
         webhook_id: "wh-1",
         organization_id: "org-1",

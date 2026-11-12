@@ -361,6 +361,9 @@ export interface OrganizationWebhookUpdate {
 export type WebhookDeliveryStatus = "pending" | "delivered" | "failed";
 
 export interface WebhookDelivery {
+  event_id: string;
+  claimed_until: string | null;
+  claim_token: string | null;
   id: string;
   webhook_id: string;
   organization_id: string;
