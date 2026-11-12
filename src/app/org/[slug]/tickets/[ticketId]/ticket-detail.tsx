@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useRef, useTransition, useActionState } from "react";
+import { SLAChip } from "@/components/sla/sla-chip";
 import Link from "next/link";
+import { TicketComments } from "./_components/ticket-comments";
 import {
   ArrowLeft,
   Trash2,
@@ -36,6 +38,12 @@ import { PresenceAvatars } from "../_components/presence-avatars";
 
 interface TicketDetailProps {
   ticket: {
+    first_response_breached?: boolean;
+    resolution_breached?: boolean;
+    first_response_due_at?: string | null;
+    first_responded_at?: string | null;
+    resolution_due_at?: string | null;
+    resolved_at?: string | null;
     id: string;
     organization_id: string;
     title: string;
@@ -637,6 +645,9 @@ export function TicketDetail({
           </div>
         </div>
       </form>
+
+      <div className="flex flex-wrap gap-2"><SLAChip ticket={currentTicket} metric="response" /><SLAChip ticket={currentTicket} metric="resolution" /></div>
+      <TicketComments orgId={orgId} orgSlug={orgSlug} ticketId={currentTicket.id} userId={callerUserId} role={callerRole} members={members} />
 
       {/* Delete Confirmation Modal */}
       <ConfirmModal

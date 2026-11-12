@@ -1,5 +1,6 @@
 "use client";
 
+import { SLAChip } from "@/components/sla/sla-chip";
 import { useState } from "react";
 import Link from "next/link";
 import { UserMinus, Calendar } from "lucide-react";
@@ -77,6 +78,8 @@ export function KanbanCard({ ticket, orgSlug, onDragStart }: KanbanCardProps) {
           {ticket.description}
         </p>
       )}
+
+      <div className="mt-2"><SLAChip ticket={ticket} /></div>
 
       {/* Footer: Assignee & Created Date */}
       <div className="mt-3.5 flex items-center justify-between gap-2 pt-2.5 border-t border-zinc-100 dark:border-zinc-800/60 text-xs">

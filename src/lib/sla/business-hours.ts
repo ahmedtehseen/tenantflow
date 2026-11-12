@@ -324,7 +324,8 @@ export function getSLAStatus(
   dueAt: Date | string | null,
   completedAt: Date | string | null,
   isBusinessOpen: boolean,
-  targetMinutes?: number
+  targetMinutes?: number,
+  remainingBusinessMinutes?: number
 ): SLAStatus {
   if (!dueAt) {
     return "none";
@@ -346,7 +347,7 @@ export function getSLAStatus(
     return "paused";
   }
 
-  const remainingMinutes =
+  const remainingMinutes = remainingBusinessMinutes ??
     (dueDate.getTime() - nowDate.getTime()) / (60 * 1000);
 
   const isAtRisk =
