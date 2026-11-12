@@ -1,6 +1,12 @@
-import type { TicketPriority, TicketStatus, SLAPolicyConfig } from "#types/database";
+import type {
+  TicketPriority,
+  TicketStatus,
+  SLAPolicyConfig,
+  Ticket,
+} from "#types/database";
 import {
   calculateBusinessDeadline,
+  isBusinessOpen,
   getNearestBusinessOpenTime,
 } from "#sla/business-hours";
 
@@ -25,23 +31,29 @@ export function getTargetMinutesForPriority(
   switch (priority) {
     case "urgent":
       return {
-        responseMinutes: policy.urgent_response_minutes ?? defaults.urgent.response,
-        resolutionMinutes: policy.urgent_resolution_minutes ?? defaults.urgent.resolution,
+        responseMinutes:
+          policy.urgent_response_minutes ?? defaults.urgent.response,
+        resolutionMinutes:
+          policy.urgent_resolution_minutes ?? defaults.urgent.resolution,
       };
     case "high":
       return {
         responseMinutes: policy.high_response_minutes ?? defaults.high.response,
-        resolutionMinutes: policy.high_resolution_minutes ?? defaults.high.resolution,
+        resolutionMinutes:
+          policy.high_resolution_minutes ?? defaults.high.resolution,
       };
     case "medium":
       return {
-        responseMinutes: policy.medium_response_minutes ?? defaults.medium.response,
-        resolutionMinutes: policy.medium_resolution_minutes ?? defaults.medium.resolution,
+        responseMinutes:
+          policy.medium_response_minutes ?? defaults.medium.response,
+        resolutionMinutes:
+          policy.medium_resolution_minutes ?? defaults.medium.resolution,
       };
     case "low":
       return {
         responseMinutes: policy.low_response_minutes ?? defaults.low.response,
-        resolutionMinutes: policy.low_resolution_minutes ?? defaults.low.resolution,
+        resolutionMinutes:
+          policy.low_resolution_minutes ?? defaults.low.resolution,
       };
   }
 }
@@ -56,10 +68,21 @@ export function computeTicketSLADeadlines(
   policy: SLAPolicyConfig,
 ): SLADeadlines {
   const startTime = getNearestBusinessOpenTime(createdAt, policy);
-  const { responseMinutes, resolutionMinutes } = getTargetMinutesForPriority(priority, policy);
+  const { responseMinutes, resolutionMinutes } = getTargetMinutesForPriority(
+    priority,
+    policy,
+  );
   return {
-    first_response_due_at: calculateBusinessDeadline(startTime, responseMinutes, policy),
-    resolution_due_at: calculateBusinessDeadline(startTime, resolutionMinutes, policy),
+    first_response_due_at: calculateBusinessDeadline(
+      startTime,
+      responseMinutes,
+      policy,
+    ),
+    resolution_due_at: calculateBusinessDeadline(
+      startTime,
+      resolutionMinutes,
+      policy,
+    ),
   };
 }
 
@@ -128,4 +151,38 @@ export function evaluateStatusTransitionSLA(
   }
 
   return result;
+}
+
+/** Re-evaluate a changed priority against the original creation time and recorded milestones. */
+export function recalculateTicketSLA(
+  ticket: Pick<
+    Ticket,
+    | "created_at"
+    | "priority"
+    | "first_responded_at"
+    | "resolved_at"
+    | "first_response_breached"
+    | "resolution_breached"
+  >,
+  policy: SLAPolicyConfig,
+  now: Date,
+) {
+  const deadlines = computeTicketSLADeadlines(
+    ticket.created_at,
+    ticket.priority,
+    policy,
+  );
+  const businessOpen = isBusinessOpen(now, policy);
+  return {
+    first_response_due_at: deadlines.first_response_due_at.toISOString(),
+    resolution_due_at: deadlines.resolution_due_at.toISOString(),
+    first_response_breached: ticket.first_responded_at
+      ? new Date(ticket.first_responded_at) > deadlines.first_response_due_at
+      : now > deadlines.first_response_due_at &&
+        (ticket.first_response_breached || businessOpen),
+    resolution_breached: ticket.resolved_at
+      ? new Date(ticket.resolved_at) > deadlines.resolution_due_at
+      : now > deadlines.resolution_due_at &&
+        (ticket.resolution_breached || businessOpen),
+  };
 }

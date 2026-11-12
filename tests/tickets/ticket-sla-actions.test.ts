@@ -169,3 +169,17 @@ describe("Ticket SLA Integration (Phase 3)", () => {
     });
   });
 });
+
+describe("Priority change breach evaluation", () => {
+  it("defers new unfinished breaches outside business hours while retaining recorded outcomes", async () => {
+    const { recalculateTicketSLA } = await import('#sla/ticket-sla');
+    const policy = { timezone: 'UTC', business_days: [1,2,3,4,5], business_start_time: '09:00', business_end_time: '17:00' };
+    const ticket = { created_at: '2026-11-09T09:00:00Z', priority: 'urgent' as const, first_responded_at: null, resolved_at: null, first_response_breached: false, resolution_breached: false };
+    const weekend = recalculateTicketSLA(ticket, policy, new Date('2026-11-14T12:00:00Z'));
+    assert.equal(weekend.first_response_breached, false);
+    assert.equal(weekend.resolution_breached, false);
+    assert.equal(recalculateTicketSLA(ticket, policy, new Date('2026-11-16T09:01:00Z')).first_response_breached, true);
+    assert.equal(recalculateTicketSLA({ ...ticket, first_response_breached: true }, policy, new Date('2026-11-14T12:00:00Z')).first_response_breached, true);
+    assert.equal(recalculateTicketSLA({ ...ticket, first_responded_at: '2026-11-09T09:30:00Z' }, policy, new Date('2026-11-14T12:00:00Z')).first_response_breached, false);
+  });
+});

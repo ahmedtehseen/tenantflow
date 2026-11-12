@@ -1,5 +1,6 @@
 "use server";
 
+import { scheduleWebhookDispatch } from "@/lib/webhooks/schedule";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
@@ -12,7 +13,11 @@ import {
   buildTicketCreatedActivity,
   buildTicketStatusChangedActivity,
 } from "@/lib/tickets/lifecycle";
-import { computeTicketSLADeadlines, evaluateStatusTransitionSLA } from "#sla/ticket-sla";
+import {
+  computeTicketSLADeadlines,
+  evaluateStatusTransitionSLA,
+  recalculateTicketSLA,
+} from "#sla/ticket-sla";
 import type { TicketStatus, TicketPriority } from "@/types/database";
 
 export interface TicketActionState {
@@ -20,7 +25,12 @@ export interface TicketActionState {
   success?: string | null;
 }
 
-const VALID_STATUSES: TicketStatus[] = ["open", "in_progress", "resolved", "closed"];
+const VALID_STATUSES: TicketStatus[] = [
+  "open",
+  "in_progress",
+  "resolved",
+  "closed",
+];
 const VALID_PRIORITIES: TicketPriority[] = ["low", "medium", "high", "urgent"];
 
 /**
@@ -42,8 +52,10 @@ async function validateTicketInput(
 ): Promise<{ data?: ValidatedTicketData; error?: string }> {
   const title = formData.get("title")?.toString().trim() ?? "";
   const description = formData.get("description")?.toString().trim() ?? "";
-  const status = (formData.get("status")?.toString().trim() ?? "open") as TicketStatus;
-  const priority = (formData.get("priority")?.toString().trim() ?? "medium") as TicketPriority;
+  const status = (formData.get("status")?.toString().trim() ??
+    "open") as TicketStatus;
+  const priority = (formData.get("priority")?.toString().trim() ??
+    "medium") as TicketPriority;
   const rawAssignedTo = formData.get("assigned_to")?.toString().trim() ?? "";
   const assigned_to = rawAssignedTo === "" ? null : rawAssignedTo;
 
@@ -68,7 +80,9 @@ async function validateTicketInput(
       .maybeSingle();
 
     if (!isMember) {
-      return { error: "The selected assignee is not a member of this organization." };
+      return {
+        error: "The selected assignee is not a member of this organization.",
+      };
     }
   }
 
@@ -105,11 +119,13 @@ export async function createTicketAction(
   }
 
   // Load organization SLA policy (falls back gracefully if not configured)
-  const { data: slaPolicy } = await supabase
+  const { data: slaPolicy, error: policyError } = await supabase
     .from("organization_sla_policies")
     .select("*")
     .eq("organization_id", orgId)
     .maybeSingle();
+
+  if (policyError) return { error: "Unable to load SLA policy." };
 
   const slaDeadlines = slaPolicy
     ? computeTicketSLADeadlines(new Date(), validation.data.priority, slaPolicy)
@@ -125,6 +141,12 @@ export async function createTicketAction(
       priority: validation.data.priority,
       created_by: user.id,
       assigned_to: validation.data.assigned_to,
+      ...(validation.data.status !== "open" && {
+        first_responded_at: new Date().toISOString(),
+      }),
+      ...(["resolved", "closed"].includes(validation.data.status) && {
+        resolved_at: new Date().toISOString(),
+      }),
       ...(slaDeadlines && {
         first_response_due_at: slaDeadlines.first_response_due_at.toISOString(),
         resolution_due_at: slaDeadlines.resolution_due_at.toISOString(),
@@ -148,6 +170,7 @@ export async function createTicketAction(
     }),
   );
 
+  scheduleWebhookDispatch(orgId);
   revalidatePath(`/org/${orgSlug}/tickets`);
   revalidatePath(`/org/${orgSlug}`);
   redirect(`/org/${orgSlug}/tickets/${newTicket.id}`);
@@ -180,7 +203,9 @@ export async function updateTicketAction(
 
   const { data: ticket, error: fetchError } = await supabase
     .from("tickets")
-    .select("id, status, priority, title, description, created_by, assigned_to, created_at")
+    .select(
+      "id, status, priority, title, description, created_by, assigned_to, created_at, updated_at, first_response_breached, resolution_breached, first_response_due_at, first_responded_at, resolution_due_at, resolved_at",
+    )
     .eq("id", ticketId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -194,7 +219,10 @@ export async function updateTicketAction(
     role: context.currentRole,
   });
   if (!editEval.allowed) {
-    return { error: editEval.reason || "You do not have permission to edit this ticket." };
+    return {
+      error:
+        editEval.reason || "You do not have permission to edit this ticket.",
+    };
   }
 
   if (validation.data.assigned_to !== ticket.assigned_to) {
@@ -204,7 +232,9 @@ export async function updateTicketAction(
     });
     if (!reassignEval.allowed) {
       return {
-        error: reassignEval.reason || "You do not have permission to reassign this ticket.",
+        error:
+          reassignEval.reason ||
+          "You do not have permission to reassign this ticket.",
       };
     }
   }
@@ -221,28 +251,37 @@ export async function updateTicketAction(
   }
 
   // Recalculate SLA deadlines from original created_at if priority changed
-  let slaRecalcUpdate: Record<string, string> = {};
+  let slaRecalcUpdate: Partial<ReturnType<typeof recalculateTicketSLA>> = {};
   if (validation.data.priority !== ticket.priority) {
-    const { data: slaPolicy } = await supabase
+    const { data: slaPolicy, error: policyError } = await supabase
       .from("organization_sla_policies")
       .select("*")
       .eq("organization_id", orgId)
       .maybeSingle();
 
+    if (policyError) return { error: "Unable to load SLA policy." };
     if (slaPolicy) {
-      const newDeadlines = computeTicketSLADeadlines(
-        new Date(ticket.created_at),
-        validation.data.priority,
+      slaRecalcUpdate = recalculateTicketSLA(
+        { ...ticket, priority: validation.data.priority },
         slaPolicy,
+        new Date(),
       );
-      slaRecalcUpdate = {
-        first_response_due_at: newDeadlines.first_response_due_at.toISOString(),
-        resolution_due_at: newDeadlines.resolution_due_at.toISOString(),
-      };
     }
   }
 
-  const { error } = await supabase
+  const slaMilestone = evaluateStatusTransitionSLA({
+    fromStatus: ticket.status,
+    toStatus: validation.data.status,
+    transitionTime: new Date(),
+    firstResponseDueAt:
+      slaRecalcUpdate.first_response_due_at ?? ticket.first_response_due_at,
+    firstRespondedAt: ticket.first_responded_at,
+    resolutionDueAt:
+      slaRecalcUpdate.resolution_due_at ?? ticket.resolution_due_at,
+    resolvedAt: ticket.resolved_at,
+  });
+
+  const { data: savedTicket, error } = await supabase
     .from("tickets")
     .update({
       title: validation.data.title,
@@ -251,12 +290,20 @@ export async function updateTicketAction(
       priority: validation.data.priority,
       assigned_to: validation.data.assigned_to,
       ...slaRecalcUpdate,
+      ...slaMilestone,
     })
     .eq("id", ticketId)
-    .eq("organization_id", orgId);
+    .eq("organization_id", orgId)
+    .eq("updated_at", ticket.updated_at)
+    .select("id")
+    .maybeSingle();
 
-  if (error) {
-    return { error: error.message || "Failed to update ticket." };
+  if (error || !savedTicket) {
+    return {
+      error:
+        error?.message ||
+        "Ticket changed while you were editing. Refresh and try again.",
+    };
   }
 
   const activitiesToInsert = buildTicketDiffActivities({
@@ -271,6 +318,7 @@ export async function updateTicketAction(
     await supabase.from("ticket_activities").insert(activitiesToInsert);
   }
 
+  scheduleWebhookDispatch(orgId);
   revalidatePath(`/org/${orgSlug}/tickets/${ticketId}`);
   revalidatePath(`/org/${orgSlug}/tickets`);
   return { success: "Ticket updated successfully." };
@@ -301,7 +349,9 @@ export async function updateTicketStatusAction(
 
   const { data: ticket, error: fetchError } = await supabase
     .from("tickets")
-    .select("id, status, created_by, assigned_to, first_response_due_at, first_responded_at, resolution_due_at, resolved_at")
+    .select(
+      "id, status, updated_at, created_by, assigned_to, first_response_due_at, first_responded_at, resolution_due_at, resolved_at",
+    )
     .eq("id", ticketId)
     .eq("organization_id", orgId)
     .maybeSingle();
@@ -329,14 +379,19 @@ export async function updateTicketStatusAction(
     resolvedAt: ticket.resolved_at,
   });
 
-  const { error } = await supabase
+  const { data: savedTicket, error } = await supabase
     .from("tickets")
     .update({ status: newStatus, ...slaMilestone })
     .eq("id", ticketId)
-    .eq("organization_id", orgId);
+    .eq("organization_id", orgId)
+    .eq("updated_at", ticket.updated_at)
+    .select("id")
+    .maybeSingle();
 
-  if (error) {
-    return { error: error.message || "Failed to update status." };
+  if (error || !savedTicket) {
+    return {
+      error: error?.message || "Ticket changed. Refresh and try again.",
+    };
   }
 
   await supabase.from("ticket_activities").insert(
@@ -349,6 +404,7 @@ export async function updateTicketStatusAction(
     }),
   );
 
+  scheduleWebhookDispatch(orgId);
   revalidatePath(`/org/${orgSlug}/tickets/${ticketId}`);
   revalidatePath(`/org/${orgSlug}/tickets`);
   return { success: `Status changed to ${newStatus}.` };
@@ -393,4 +449,3 @@ export async function deleteTicketAction(
 
   return { success: "Ticket deleted successfully." };
 }
-

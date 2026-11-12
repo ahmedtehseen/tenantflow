@@ -1,5 +1,7 @@
 import { Settings as SettingsIcon } from "lucide-react";
 import { getTenantContext } from "@/lib/data/tenant";
+import { createClient } from "@/lib/supabase/server";
+import { Phase3Settings } from "./_components/phase3-settings";
 import { SettingsForms } from "./_components/settings-forms";
 
 interface SettingsPageProps {
@@ -12,6 +14,14 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
   // Instant in-memory cache hit from layout
   const { currentOrg: org, currentRole } = await getTenantContext(slug);
 
+  const client = await createClient();
+  const canManage = currentRole === "owner" || currentRole === "admin";
+  const [policy, webhooks, deliveries] = await Promise.all([
+    client.from("organization_sla_policies").select("*").eq("organization_id", org.id).maybeSingle(),
+    canManage ? client.from("organization_webhooks").select("*").eq("organization_id", org.id).order("created_at", { ascending: false }) : Promise.resolve({ data: [], error: null }),
+    canManage ? client.from("webhook_deliveries").select("*").eq("organization_id", org.id).order("created_at", { ascending: false }).limit(30) : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (policy.error || webhooks.error || deliveries.error) throw new Error("Unable to load workspace settings.");
   return (
     <div className="space-y-8">
       <div>
@@ -26,10 +36,12 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
         </p>
       </div>
 
+      <Phase3Settings orgId={org.id} slug={slug} policy={policy.data} webhooks={webhooks.data || []} deliveries={deliveries.data || []} canManage={canManage}>
       <SettingsForms
         org={org}
         callerRole={currentRole}
       />
+      </Phase3Settings>
     </div>
   );
 }
