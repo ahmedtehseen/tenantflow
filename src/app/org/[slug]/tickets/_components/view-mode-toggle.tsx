@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useCallback } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { List, LayoutGrid } from "lucide-react";
 import { resolveViewMode, type ViewMode } from "@/lib/tickets/view-mode";
 
@@ -18,7 +18,6 @@ function ViewModeToggleInner({
   onViewChange,
   className = "",
 }: ViewModeToggleProps) {
-  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -29,7 +28,10 @@ function ViewModeToggleInner({
     (nextView: ViewMode) => {
       if (nextView === activeView) return;
 
-      onViewChange?.(nextView);
+      if (onViewChange) {
+        onViewChange(nextView);
+        return;
+      }
 
       const params = new URLSearchParams(searchParams ? searchParams.toString() : "");
       if (nextView === "kanban") {
@@ -40,9 +42,9 @@ function ViewModeToggleInner({
 
       const queryString = params.toString();
       const targetUrl = queryString ? `${pathname}?${queryString}` : pathname;
-      router.replace(targetUrl, { scroll: false });
+      window.history.replaceState(null, "", targetUrl);
     },
-    [activeView, onViewChange, searchParams, pathname, router],
+    [activeView, onViewChange, searchParams, pathname],
   );
 
   return (

@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkspaceState, useWorkspaceMutation } from "@/components/workspace/workspace-provider";
+
 import { useEffect, useRef, useState, useTransition } from "react";
 import Markdown from "react-markdown";
 import { createClient } from "@/lib/supabase/client";
@@ -24,9 +26,11 @@ export function TicketComments({
   role: OrgRole;
   members: MemberOption[];
 }) {
-  const [comments, setComments] = useState<TicketComment[]>([]);
-  const [content, setContent] = useState("");
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const deleteComment = useWorkspaceMutation(deleteCommentAction);
+  const saveComment = useWorkspaceMutation(saveCommentAction);
+  const [comments, setComments] = useWorkspaceState<TicketComment[]>(`ticket:${ticketId}:comments`, []);
+  const [content, setContent] = useWorkspaceState(`ticket:${ticketId}:comment-draft`, "");
+  const [editingId, setEditingId] = useWorkspaceState<string | null>(`ticket:${ticketId}:comment-edit`, null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -100,7 +104,7 @@ export function TicketComments({
       clearInterval(timer);
       void client.removeChannel(channel);
     };
-  }, [orgId, ticketId]);
+  }, [orgId, ticketId, setComments]);
 
   const mention = content.slice(0, caret).match(/(?:^|\s)@([^@\[\]\n]*)$/);
   const suggestions = mention
@@ -131,7 +135,7 @@ export function TicketComments({
   function save() {
     startTransition(async () => {
       try {
-        const result = await saveCommentAction(
+        const result = await saveComment(
           orgSlug,
           orgId,
           ticketId,
@@ -307,7 +311,7 @@ export function TicketComments({
         onConfirm={() => {
           startTransition(async () => {
             try {
-              const result = await deleteCommentAction(
+              const result = await deleteComment(
                 orgSlug,
                 orgId,
                 ticketId,

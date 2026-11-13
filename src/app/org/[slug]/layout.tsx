@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { WorkspaceProvider } from "@/components/workspace/workspace-provider";
 import { SLAProvider } from "@/components/sla/sla-provider";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -10,7 +11,7 @@ import { TenantNav } from "./_components/tenant-nav";
 
 export const instant = false;
 
-import { signOutAction } from "@/lib/auth/actions";
+import { SignOutForm } from "@/components/auth/sign-out-form";
 
 interface TenantLayoutProps {
   children: React.ReactNode;
@@ -58,6 +59,7 @@ export default async function TenantLayout({
   if (slaError) throw new Error("Unable to load workspace SLA policy.");
 
   return (
+    <WorkspaceProvider key={`${user.id}:${currentOrg.id}:${currentRole}`} userId={user.id} orgId={currentOrg.id} slug={slug}>
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950">
       {/* Top Navbar */}
       <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-900/90">
@@ -104,7 +106,7 @@ export default async function TenantLayout({
               </span>
             </div>
 
-            <form action={signOutAction}>
+            <SignOutForm>
               <button
                 type="submit"
                 title="Sign out"
@@ -112,7 +114,7 @@ export default async function TenantLayout({
               >
                 <LogOut className="size-4" />
               </button>
-            </form>
+            </SignOutForm>
           </div>
         </div>
 
@@ -137,5 +139,6 @@ export default async function TenantLayout({
         </div>
       </main>
     </div>
+    </WorkspaceProvider>
   );
 }

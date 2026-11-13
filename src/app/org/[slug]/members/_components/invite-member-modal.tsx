@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkspaceMutation } from "@/components/workspace/workspace-provider";
+
 import { useState, useEffect, useRef, useActionState } from "react";
 import {
   UserPlus,
@@ -88,7 +90,7 @@ function InviteDialog({
   const [role, setRole] = useState<InvitationRole>("member");
   const [copied, setCopied] = useState(false);
 
-  const boundAction = createInvitationAction.bind(null, orgId, orgSlug);
+  const boundAction = useWorkspaceMutation(createInvitationAction.bind(null, orgId, orgSlug));
   const [state, formAction, isPending] = useActionState(
     boundAction,
     initialActionState,

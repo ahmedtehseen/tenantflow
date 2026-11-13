@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkspaceState, useWorkspaceMutation, useRefreshWorkspace } from "@/components/workspace/workspace-provider";
+
 import { useState, useTransition, useMemo, useCallback } from "react";
 import Link from "next/link";
 import {
@@ -18,6 +20,7 @@ import { Select } from "@/components/ui/select";
 import { KanbanBoard } from "./kanban-board";
 import { ViewModeToggle, type ViewMode } from "./view-mode-toggle";
 import { PresenceAvatars } from "./presence-avatars";
+import { useTicketView } from "@/hooks/use-ticket-view";
 import { useTicketRealtime } from "@/hooks/use-ticket-realtime";
 import { useWorkspacePresence } from "@/hooks/use-workspace-presence";
 import {
@@ -44,6 +47,7 @@ export interface TicketItem {
   created_by: string | null;
   assigned_to: string | null;
   created_at: string;
+  updated_at?: string;
   creator?: {
     id: string;
     full_name: string | null;
@@ -85,12 +89,16 @@ export function TicketList({
   callerName,
   initialView = "list",
 }: TicketListProps) {
-  const [activeView, setActiveView] = useState<ViewMode>(initialView);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [priorityFilter, setPriorityFilter] = useState<string>("all");
-  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
+  const refresh = useRefreshWorkspace();
+  const deleteTicket = useWorkspaceMutation(deleteTicketAction);
 
+  const [activeView, setActiveView] = useTicketView(initialView);
+  const [search, setSearch] = useWorkspaceState("tickets:search", "");
+  const [statusFilter, setStatusFilter] = useWorkspaceState<string>("tickets:statusFilter", "all");
+  const [priorityFilter, setPriorityFilter] = useWorkspaceState<string>("tickets:priorityFilter", "all");
+  const [assigneeFilter, setAssigneeFilter] = useWorkspaceState<string>("tickets:assigneeFilter", "all");
+
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [ticketToDelete, setTicketToDelete] = useState<TicketItem | null>(null);
   const [isDeleting, startDeleteTransition] = useTransition();
 
@@ -138,22 +146,24 @@ export function TicketList({
         optimisticTicketStatusTransition(current, ticketId, nextStatus),
       );
 
-      const res = await updateTicketStatusAction(
-        ticketId,
-        orgId,
-        orgSlug,
-        nextStatus,
-      );
+      let res;
+      try {
+        res = await updateTicketStatusAction(ticketId, orgId, orgSlug, nextStatus);
+      } catch {
+        res = { error: "Unable to update status. Try again." };
+      }
       if (res?.error) {
         // Revert on error
         setTickets((current) =>
-          revertOptimisticTicketStatus(current, ticketId, previousStatus),
+          revertOptimisticTicketStatus(current, ticketId, previousStatus, nextStatus),
         );
+        await refresh();
         return { error: res.error };
       }
+      await refresh();
       return { success: res?.success || "Status updated" };
     },
-    [tickets, orgId, orgSlug, setTickets],
+    [tickets, orgId, orgSlug, setTickets, refresh],
   );
 
   // Metrics
@@ -226,8 +236,18 @@ export function TicketList({
   const handleDeleteConfirm = () => {
     if (!ticketToDelete) return;
     startDeleteTransition(async () => {
-      await deleteTicketAction(ticketToDelete.id, orgId, orgSlug);
-      setTicketToDelete(null);
+      setDeleteError(null);
+      try {
+        const result = await deleteTicket(ticketToDelete.id, orgId, orgSlug);
+        if (result.error) {
+          setDeleteError(result.error);
+          return;
+        }
+        setTickets((current) => current.filter((ticket) => ticket.id !== ticketToDelete.id));
+        setTicketToDelete(null);
+      } catch {
+        setDeleteError("Unable to delete ticket. Try again.");
+      }
     });
   };
 
@@ -521,7 +541,7 @@ export function TicketList({
                   {canDeleteTicket(ticket) && (
                     <button
                       type="button"
-                      onClick={() => setTicketToDelete(ticket)}
+                      onClick={() => { setDeleteError(null); setTicketToDelete(ticket); }}
                       title="Delete ticket"
                       className="flex size-8 items-center justify-center rounded-lg border border-red-100 bg-white text-red-600 hover:bg-red-50 dark:border-red-950/60 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950/50 transition cursor-pointer"
                     >
@@ -578,6 +598,7 @@ export function TicketList({
       <ConfirmModal
         isOpen={ticketToDelete !== null}
         isLoading={isDeleting}
+        error={deleteError}
         title="Delete ticket?"
         description={`Are you sure you want to delete "${ticketToDelete?.title}"? This operational record will be permanently removed.`}
         confirmText="Delete Ticket"

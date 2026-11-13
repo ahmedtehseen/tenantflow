@@ -23,6 +23,7 @@ import type { TicketStatus, TicketPriority } from "@/types/database";
 export interface TicketActionState {
   error?: string | null;
   success?: string | null;
+  ticketId?: string;
 }
 
 const VALID_STATUSES: TicketStatus[] = [
@@ -173,7 +174,7 @@ export async function createTicketAction(
   scheduleWebhookDispatch(orgId);
   revalidatePath(`/org/${orgSlug}/tickets`);
   revalidatePath(`/org/${orgSlug}`);
-  redirect(`/org/${orgSlug}/tickets/${newTicket.id}`);
+  return { success: "Ticket created successfully.", ticketId: newTicket.id };
 }
 
 /**

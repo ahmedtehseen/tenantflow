@@ -1,6 +1,8 @@
 "use client";
 
-import { useTransition } from "react";
+import { useWorkspaceMutation } from "@/components/workspace/workspace-provider";
+
+import { useState, useTransition } from "react";
 import { Circle, Clock, CheckCircle2, XCircle, ChevronDown } from "lucide-react";
 import { updateTicketStatusAction } from "../actions";
 import type { TicketStatus } from "@/types/database";
@@ -20,6 +22,9 @@ export function TicketStatusBadge({
   orgSlug,
   isEditable = false,
 }: TicketStatusBadgeProps) {
+  const updateStatus = useWorkspaceMutation(updateTicketStatusAction);
+
+  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const getStatusConfig = (s: TicketStatus) => {
@@ -62,13 +67,21 @@ export function TicketStatusBadge({
     const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
       const newStatus = e.target.value as TicketStatus;
       startTransition(async () => {
-        await updateTicketStatusAction(ticketId, orgId, orgSlug, newStatus);
+        setError(null);
+        try {
+          const result = await updateStatus(ticketId, orgId, orgSlug, newStatus);
+          if (result.error) setError(result.error);
+        } catch {
+          setError("Unable to update status. Try again.");
+        }
       });
     };
 
     return (
       <div className="relative inline-flex items-center">
+        {error && <span role="alert" className="mr-2 text-xs text-red-600 dark:text-red-400">{error}</span>}
         <select
+          aria-label="Ticket status"
           value={status}
           disabled={isPending}
           onChange={handleStatusChange}

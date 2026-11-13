@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/data/tenant";
-import { signOutAction } from "@/lib/auth/actions";
+import { SignOutForm } from "@/components/auth/sign-out-form";
 
 async function UserStatus() {
   const user = await getCurrentUser();
@@ -70,7 +70,7 @@ async function UserStatus() {
             {user.email} &middot; ID: {user.id.slice(0, 8)}...
           </p>
         </div>
-        <form action={signOutAction}>
+        <SignOutForm>
           <button
             type="submit"
             className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
@@ -78,7 +78,7 @@ async function UserStatus() {
             <LogOut className="size-3.5" />
             Sign out
           </button>
-        </form>
+        </SignOutForm>
       </div>
 
       <div className="space-y-3">

@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkspaceMutation } from "@/components/workspace/workspace-provider";
+
 import { useTransition, useState } from "react";
 import {
   Trash2,
@@ -41,6 +43,10 @@ export function MemberRow({
   callerRole,
   member,
 }: MemberRowProps) {
+  const updateRole = useWorkspaceMutation(updateMemberRoleAction);
+  const removeMember = useWorkspaceMutation(removeMemberAction);
+  const leaveOrganization = useWorkspaceMutation(leaveOrganizationAction);
+
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -77,7 +83,7 @@ export function MemberRow({
     const newRole = e.target.value as OrgRole;
     setError(null);
     startTransition(async () => {
-      const res = await updateMemberRoleAction(
+      const res = await updateRole(
         orgId,
         orgSlug,
         member.user_id,
@@ -93,7 +99,7 @@ export function MemberRow({
     setError(null);
     if (isSelf) {
       startTransition(async () => {
-        const res = await leaveOrganizationAction(orgId);
+        const res = await leaveOrganization(orgId);
         if (res?.error) {
           setError(res.error);
           setShowConfirm(false);
@@ -101,7 +107,7 @@ export function MemberRow({
       });
     } else {
       startTransition(async () => {
-        const res = await removeMemberAction(orgId, orgSlug, member.user_id);
+        const res = await removeMember(orgId, orgSlug, member.user_id);
         if (res?.error) {
           setError(res.error);
         }
