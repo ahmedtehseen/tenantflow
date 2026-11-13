@@ -7,8 +7,8 @@ Tasks 4 through 8 are implemented on `feat/phase-3-sla-automations`.
 - Live Markdown discussions support structured teammate mentions, author editing, author/admin deletion, and deletion audit entries.
 - The header notification bell streams recipient-scoped notifications and supports marking individual or all notifications read.
 - Database triggers save notifications and webhook delivery jobs atomically with ticket/comment changes. Recipient targeting and member validation live in the database migration.
-- Signed HTTPS webhooks support endpoint creation, editing, enabling/disabling, deletion, delivery history, and manual retry. Dispatch reserves attempts using database leases. Supabase stores the durable outbox, and optional Upstash Redis maintains the retry index with an offline memory fallback.
-- The authenticated background route processes SLA breaches, deduplicated risk warnings, and webhook retries. `vercel.json` schedules the route every 30 minutes using Vercel Schedules.
+- Signed HTTPS webhooks support endpoint creation, editing, enabling/disabling, deletion, delivery history, and manual retry. Dispatch reserves attempts using database leases. Supabase stores the durable outbox, and Upstash Redis stores the delayed retry queue with an offline memory fallback.
+- The authenticated background route processes SLA breaches, deduplicated risk warnings, and Redis-ready webhook retries, with Supabase recovery for eligible jobs. `vercel.json` schedules the route every 30 minutes using Vercel Schedules.
 - SLA countdown chips appear on Kanban cards and ticket details. Organization settings expose SLA policy and webhook sections. Policy changes apply to new tickets and subsequent priority changes. Target inputs accept 1–525,600 business minutes.
 - General ticket editing now applies SLA milestones as well as quick status changes. Both mutation paths reject concurrent stale writes.
 - Realtime subscriptions await browser authentication before joining. Comment mutations refresh the discussion without revalidating the parent ticket form.
@@ -20,7 +20,7 @@ Migrations `05_phase_3_sla_notifications_webhooks.sql` and `20261112220208_phase
 
 ### Verification
 
-- 231 tests pass, including actual PostgreSQL migration, trigger, RLS, targeting, deduplication, and claim tests through PGlite.
+- 232 tests pass, including actual PostgreSQL migration, trigger, RLS, targeting, deduplication, and claim tests through PGlite.
 - Type checking and lint pass. The Webpack production build compiles all 16 routes and emits Tailwind utilities.
 - Two-user browser checks cover live discussion, mentions, notifications, read state, author editing, deletion/audit, general edit SLA milestones, policy settings, webhook CRUD, member permissions, and responsive layout. Temporary verification users and their organization are removed after each run.
 - The production worker route returns 401 for missing/incorrect bearer tokens and 200 for a valid token. A reserved `.invalid` endpoint verifies persisted delivery failure, future retry eligibility, the five-attempt limit, and administrator manual retry through settings.
@@ -30,7 +30,11 @@ Migrations `05_phase_3_sla_notifications_webhooks.sql` and `20261112220208_phase
 
 Follow [the scheduler setup guide](scheduler-setup.md) for secret configuration, deployment, a manual test, and troubleshooting.
 
-Deploy the updated application and configure `CRON_SECRET` in the production environment to activate the scheduled worker. Optional `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` enable the Redis retry index. Pending deliveries remain durable in Supabase when Redis is absent or unavailable.
+Deploy the updated application and configure `CRON_SECRET` in the production environment to activate the scheduled worker. Configure `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` for the planned production Redis retry queue. Pending deliveries remain durable in Supabase when Redis is absent or unavailable.
+
+### November 13 Redis correction
+
+The initial continuation treated Redis as an optional index and read Redis-ready IDs only during cleanup. The corrected worker dispatches Redis-ready IDs, deduplicates them against Supabase recovery candidates, and keeps database delivery claims for concurrency safety. A regression test exercises Redis dispatch, duplicate IDs, Redis outage recovery, and organization-scoped immediate dispatch. The scheduler guide now includes Upstash database setup as a production step.
 
 The November 10 checkpoint and original implementation notes follow.
 

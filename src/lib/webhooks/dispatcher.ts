@@ -79,7 +79,7 @@ export async function dispatchWebhookDelivery(deliveryId: string) {
       await scheduleWebhookRetry(deliveryId, new Date(nextRetryAt).getTime());
     else await removeWebhookRetry(deliveryId);
   } catch {
-    console.error("Webhook retry index unavailable", { deliveryId });
+    console.error("Webhook retry queue unavailable", { deliveryId });
   }
 }
 
@@ -97,15 +97,31 @@ export async function dispatchPendingWebhooks(orgId?: string) {
   if (orgId) query = query.eq("organization_id", orgId);
   const { data, error } = await query;
   if (error) throw new Error("Unable to load pending webhook deliveries.");
+  let readyRetryIds: string[] = [];
+  if (!orgId) {
+    try {
+      readyRetryIds = await getReadyWebhookRetries(Date.now());
+    } catch {
+      console.error(
+        "Redis retry queue unavailable. Recovering jobs from Supabase.",
+      );
+    }
+  }
+  const deliveryIds = [
+    ...new Set([
+      ...readyRetryIds,
+      ...(data || []).map((delivery) => delivery.id as string),
+    ]),
+  ].slice(0, orgId ? 5 : 20);
   const results = await Promise.allSettled(
-    (data || []).map((delivery) => dispatchWebhookDelivery(delivery.id)),
+    deliveryIds.map((id) => dispatchWebhookDelivery(id)),
   );
   if (results.some((result) => result.status === "rejected"))
     throw new Error("Some webhook jobs could not be processed.");
   if (!orgId) {
-    // Remove expired index entries only after durable queue processing. A pending future retry keeps its score.
+    // Remove completed retry entries after durable queue processing. A pending future retry keeps its score.
     try {
-      for (const id of await getReadyWebhookRetries(Date.now())) {
+      for (const id of readyRetryIds) {
         const { data: row, error: readError } = await client
           .from("webhook_deliveries")
           .select("status,next_retry_at")
@@ -115,7 +131,7 @@ export async function dispatchPendingWebhooks(orgId?: string) {
           await removeWebhookRetry(id);
       }
     } catch {
-      console.error("Webhook retry index cleanup unavailable");
+      console.error("Webhook retry queue cleanup unavailable");
     }
   }
 }
