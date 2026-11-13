@@ -56,4 +56,8 @@ PostgreSQL/PGlite checks exercise the migration triggers, private-topic membersh
 
 ## Deployment
 
-Apply `supabase/migrations/20261113174538_workspace_realtime_sync.sql` to hosted Supabase during deployment to activate private workspace notifications. Its policy and triggers use Supabase's native Realtime database functions.
+Applied `supabase/migrations/20261113174538_workspace_realtime_sync.sql` to the hosted TenantFlow project (`owkqbuypklkoaiddmnbt`) on 2026-11-13. Followed the repository workflow from `docs/PROJECT_CONTEXT.md`, using an explicit hosted target with the installed Supabase CLI 3.1.0.
+
+The preflight dry run selected this migration alone. After applying it, hosted queries confirmed its migration-history entry, all eight enabled workspace triggers, the authenticated membership policy on `realtime.messages`, enabled row-level security, and restricted trigger-function execution. The final dry run reported the hosted database up to date.
+
+Security advisor checks reported the same eight pre-existing warnings before and after application. Runtime browser authentication and websocket recovery against hosted Supabase remain outside this verification.
