@@ -29,6 +29,12 @@ import { deleteTicketAction, updateTicketStatusAction } from "../actions";
 import type { TicketStatus, TicketPriority, OrgRole } from "@/types/database";
 
 export interface TicketItem {
+  first_response_breached?: boolean;
+  resolution_breached?: boolean;
+  first_response_due_at?: string | null;
+  first_responded_at?: string | null;
+  resolution_due_at?: string | null;
+  resolved_at?: string | null;
   id: string;
   organization_id: string;
   title: string;

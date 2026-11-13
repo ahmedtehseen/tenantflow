@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "schedules": {
+    "tenantflow-background-jobs": {
+      "schedule": "*/30 * * * *",
+      "path": "/api/cron/process-background-jobs",
+      "requestMethod": "POST"
+    }
+  }
+}

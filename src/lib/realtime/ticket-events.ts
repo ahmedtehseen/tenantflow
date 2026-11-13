@@ -7,6 +7,12 @@ export interface TicketMemberInfo {
 }
 
 export interface TicketItem {
+  first_response_breached?: boolean;
+  resolution_breached?: boolean;
+  first_response_due_at?: string | null;
+  first_responded_at?: string | null;
+  resolution_due_at?: string | null;
+  resolved_at?: string | null;
   id: string;
   organization_id: string;
   title: string;
@@ -71,6 +77,12 @@ export function applyTicketRealtimeEvent(
         created_by: raw.created_by ?? null,
         assigned_to: raw.assigned_to ?? null,
         created_at: raw.created_at,
+        first_response_breached: raw.first_response_breached ?? false,
+        resolution_breached: raw.resolution_breached ?? false,
+        first_response_due_at: raw.first_response_due_at ?? null,
+        first_responded_at: raw.first_responded_at ?? null,
+        resolution_due_at: raw.resolution_due_at ?? null,
+        resolved_at: raw.resolved_at ?? null,
         creator,
         assignee,
       };

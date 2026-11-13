@@ -22,7 +22,9 @@ export interface ActivityItem {
     | "status_changed"
     | "priority_changed"
     | "assignee_changed"
-    | "details_updated";
+    | "details_updated"
+    | "comment_deleted"
+    | "sla_breached";
   old_value: string | null;
   new_value: string | null;
   metadata: Record<string, unknown>;
@@ -85,6 +87,7 @@ function getActivityConfig(type: ActivityItem["activity_type"]) {
         badgeStyles:
           "bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-950/60 dark:border-blue-900/60 dark:text-blue-400",
       };
+    case "sla_breached":
     case "priority_changed":
       return {
         icon: AlertTriangle,
@@ -253,6 +256,10 @@ function renderActivityDescription(
       );
     }
 
+    case "sla_breached":
+      return <span><strong>{actorName}</strong> recorded a {String(item.metadata.metric || "ticket").replaceAll("_", " ")} SLA breach.</span>;
+    case "comment_deleted":
+      return <span><strong>{actorName}</strong> deleted a comment.</span>;
     case "details_updated":
       return (
         <span>

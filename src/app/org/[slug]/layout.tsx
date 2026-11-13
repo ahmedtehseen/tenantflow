@@ -1,8 +1,11 @@
+import { createClient } from "@/lib/supabase/server";
+import { SLAProvider } from "@/components/sla/sla-provider";
 import { Suspense } from "react";
 import Link from "next/link";
 import { Workflow, LogOut, ShieldAlert } from "lucide-react";
 import { getTenantContext } from "@/lib/data/tenant";
 import { TenantSwitcher } from "./_components/tenant-switcher";
+import { NotificationBell } from "./_components/notification-bell";
 import { TenantNav } from "./_components/tenant-nav";
 
 export const instant = false;
@@ -50,16 +53,20 @@ export default async function TenantLayout({
     );
   }
 
+  const client = await createClient();
+  const { data: slaPolicy, error: slaError } = await client.from("organization_sla_policies").select("*").eq("organization_id", currentOrg.id).maybeSingle();
+  if (slaError) throw new Error("Unable to load workspace SLA policy.");
+
   return (
     <div className="flex min-h-screen flex-col bg-zinc-50 dark:bg-zinc-950">
       {/* Top Navbar */}
       <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/90 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-900/90">
-        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4 sm:gap-6">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-2 px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-6">
             {/* Brand Logo */}
             <Link
               href="/"
-              className="flex items-center gap-2 text-zinc-900 dark:text-zinc-100 hover:opacity-85 transition"
+              className="flex shrink-0 items-center gap-2 text-zinc-900 dark:text-zinc-100 hover:opacity-85 transition"
               title="TenantFlow Home"
             >
               <div className="flex size-8 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-xs">
@@ -70,7 +77,7 @@ export default async function TenantLayout({
               </span>
             </Link>
 
-            <span className="text-zinc-300 dark:text-zinc-700 select-none">/</span>
+            <span className="hidden text-zinc-300 dark:text-zinc-700 select-none sm:inline">/</span>
 
             {/* Tenant Switcher Dropdown */}
             <TenantSwitcher
@@ -86,7 +93,8 @@ export default async function TenantLayout({
           </div>
 
           {/* Right Header: User profile & Sign Out */}
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <NotificationBell key={currentOrg.id} orgId={currentOrg.id} slug={slug} userId={user.id} />
             <div className="hidden sm:flex flex-col text-right">
               <span className="text-xs font-medium text-zinc-900 dark:text-zinc-100 truncate max-w-[150px]">
                 {profile?.full_name || user.email}
@@ -124,7 +132,7 @@ export default async function TenantLayout({
               </div>
             }
           >
-            {children}
+            <SLAProvider policy={slaPolicy}>{children}</SLAProvider>
           </Suspense>
         </div>
       </main>

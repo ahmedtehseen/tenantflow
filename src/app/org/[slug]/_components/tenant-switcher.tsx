@@ -63,23 +63,23 @@ export function TenantSwitcher({
 
 
   return (
-    <div className="relative" ref={menuRef}>
+    <div className="relative min-w-0" ref={menuRef}>
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="flex items-center gap-2.5 rounded-xl border border-zinc-200/80 bg-white px-3 py-1.5 text-left shadow-2xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/80 transition cursor-pointer"
+        className="flex w-full min-w-0 items-center gap-2 rounded-xl border border-zinc-200/80 bg-white px-2 py-1.5 sm:px-3 text-left shadow-2xs hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/80 transition cursor-pointer"
         aria-expanded={open}
         aria-haspopup="true"
       >
-        <div className="flex size-7 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 shrink-0">
+        <div className="hidden size-7 items-center justify-center rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 shrink-0 sm:flex">
           <Building2 className="size-4" />
         </div>
         <div className="flex flex-col min-w-0 pr-1">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-xs font-semibold text-zinc-900 dark:text-zinc-100 max-w-[140px] sm:max-w-[200px]">
               {currentOrg.name}
             </span>
-            <RoleBadge role={currentRole} className="text-[11px] px-1.5" />
+            <RoleBadge role={currentRole} className="shrink-0 text-[11px] px-1.5" />
           </div>
           <span className="font-mono text-[11px] text-zinc-400 truncate">
             {currentOrg.slug}

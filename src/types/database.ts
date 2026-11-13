@@ -5,6 +5,14 @@ export type TicketPriority = "low" | "medium" | "high" | "urgent";
 export type InvitationRole = "admin" | "member";
 export type InvitationStatus = "pending" | "accepted" | "expired" | "revoked";
 
+export type SLAStatus =
+  | "on_track"
+  | "at_risk"
+  | "breached"
+  | "met"
+  | "paused"
+  | "none";
+
 export interface Profile {
   id: string;
   email: string;
@@ -92,6 +100,81 @@ export function getInvitationStatus(invitation: {
   return "pending";
 }
 
+// -----------------------------------------------------------------------------
+// SLA Policies (ADR Phase 3)
+// -----------------------------------------------------------------------------
+
+export interface SLAPolicyConfig {
+  timezone: string;
+  business_days: number[];
+  business_start_time: string;
+  business_end_time: string;
+  urgent_response_minutes?: number;
+  urgent_resolution_minutes?: number;
+  high_response_minutes?: number;
+  high_resolution_minutes?: number;
+  medium_response_minutes?: number;
+  medium_resolution_minutes?: number;
+  low_response_minutes?: number;
+  low_resolution_minutes?: number;
+}
+
+export interface OrganizationSLAPolicy {
+  id: string;
+  organization_id: string;
+  timezone: string;
+  business_days: number[];
+  business_start_time: string;
+  business_end_time: string;
+  urgent_response_minutes: number;
+  urgent_resolution_minutes: number;
+  high_response_minutes: number;
+  high_resolution_minutes: number;
+  medium_response_minutes: number;
+  medium_resolution_minutes: number;
+  low_response_minutes: number;
+  low_resolution_minutes: number;
+  created_at: string;
+  updated_at: string;
+  organization?: Organization;
+}
+
+export interface OrganizationSLAPolicyInsert {
+  id?: string;
+  organization_id: string;
+  timezone?: string;
+  business_days?: number[];
+  business_start_time?: string;
+  business_end_time?: string;
+  urgent_response_minutes?: number;
+  urgent_resolution_minutes?: number;
+  high_response_minutes?: number;
+  high_resolution_minutes?: number;
+  medium_response_minutes?: number;
+  medium_resolution_minutes?: number;
+  low_response_minutes?: number;
+  low_resolution_minutes?: number;
+}
+
+export interface OrganizationSLAPolicyUpdate {
+  timezone?: string;
+  business_days?: number[];
+  business_start_time?: string;
+  business_end_time?: string;
+  urgent_response_minutes?: number;
+  urgent_resolution_minutes?: number;
+  high_response_minutes?: number;
+  high_resolution_minutes?: number;
+  medium_response_minutes?: number;
+  medium_resolution_minutes?: number;
+  low_response_minutes?: number;
+  low_resolution_minutes?: number;
+}
+
+// -----------------------------------------------------------------------------
+// Tickets & Activities
+// -----------------------------------------------------------------------------
+
 export interface Ticket {
   id: string;
   organization_id: string;
@@ -101,10 +184,33 @@ export interface Ticket {
   priority: TicketPriority;
   created_by: string | null;
   assigned_to: string | null;
+  first_response_due_at: string | null;
+  resolution_due_at: string | null;
+  first_responded_at: string | null;
+  first_response_breached: boolean;
+  resolved_at: string | null;
+  resolution_breached: boolean;
   created_at: string;
   updated_at: string;
   creator?: Profile;
   assignee?: Profile;
+}
+
+export interface TicketInsert {
+  id?: string;
+  organization_id: string;
+  title: string;
+  description?: string | null;
+  status?: TicketStatus;
+  priority?: TicketPriority;
+  created_by?: string | null;
+  assigned_to?: string | null;
+  first_response_due_at?: string | null;
+  resolution_due_at?: string | null;
+  first_responded_at?: string | null;
+  first_response_breached?: boolean;
+  resolved_at?: string | null;
+  resolution_breached?: boolean;
 }
 
 export type TicketActivityType =
@@ -112,7 +218,9 @@ export type TicketActivityType =
   | "status_changed"
   | "priority_changed"
   | "assignee_changed"
-  | "details_updated";
+  | "details_updated"
+  | "comment_deleted"
+  | "sla_breached";
 
 export interface TicketActivity {
   id: string;
@@ -139,6 +247,167 @@ export interface TicketActivityInsert {
   created_at?: string;
 }
 
+// -----------------------------------------------------------------------------
+// Ticket Comments (Phase 3)
+// -----------------------------------------------------------------------------
+
+export interface TicketComment {
+  id: string;
+  ticket_id: string;
+  organization_id: string;
+  author_id: string;
+  content: string;
+  is_edited: boolean;
+  edited_at: string | null;
+  created_at: string;
+  updated_at: string;
+  author?: Profile;
+  ticket?: Ticket;
+}
+
+export interface TicketCommentInsert {
+  id?: string;
+  ticket_id: string;
+  organization_id: string;
+  author_id: string;
+  content: string;
+  is_edited?: boolean;
+  edited_at?: string | null;
+}
+
+export interface TicketCommentUpdate {
+  content?: string;
+  is_edited?: boolean;
+  edited_at?: string | null;
+}
+
+// -----------------------------------------------------------------------------
+// Notifications (Phase 3)
+// -----------------------------------------------------------------------------
+
+export type NotificationType =
+  | "ticket_assigned"
+  | "mention"
+  | "status_changed"
+  | "sla_breached"
+  | "sla_at_risk";
+
+export interface Notification {
+  id: string;
+  organization_id: string;
+  recipient_id: string;
+  actor_id: string | null;
+  ticket_id: string | null;
+  type: NotificationType | string;
+  title: string;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+  actor?: Profile;
+  ticket?: Ticket;
+  organization?: Organization;
+}
+
+export interface NotificationInsert {
+  id?: string;
+  organization_id: string;
+  recipient_id: string;
+  actor_id?: string | null;
+  ticket_id?: string | null;
+  type: NotificationType | string;
+  title: string;
+  body: string;
+  read_at?: string | null;
+}
+
+export interface NotificationUpdate {
+  read_at?: string | null;
+}
+
+// -----------------------------------------------------------------------------
+// Webhooks & Deliveries (Phase 3)
+// -----------------------------------------------------------------------------
+
+export interface OrganizationWebhook {
+  id: string;
+  organization_id: string;
+  url: string;
+  secret: string;
+  description: string | null;
+  events: string[];
+  is_active: boolean;
+  created_at: string;
+  organization?: Organization;
+}
+
+export interface OrganizationWebhookInsert {
+  id?: string;
+  organization_id: string;
+  url: string;
+  secret: string;
+  description?: string | null;
+  events?: string[];
+  is_active?: boolean;
+}
+
+export interface OrganizationWebhookUpdate {
+  url?: string;
+  secret?: string;
+  description?: string | null;
+  events?: string[];
+  is_active?: boolean;
+}
+
+export type WebhookDeliveryStatus = "pending" | "delivered" | "failed";
+
+export interface WebhookDelivery {
+  event_id: string;
+  claimed_until: string | null;
+  claim_token: string | null;
+  id: string;
+  webhook_id: string;
+  organization_id: string;
+  event_type: string;
+  payload: Record<string, unknown>;
+  attempts: number;
+  max_attempts: number;
+  status: WebhookDeliveryStatus;
+  last_status_code: number | null;
+  last_error: string | null;
+  next_retry_at: string | null;
+  created_at: string;
+  delivered_at: string | null;
+  webhook?: OrganizationWebhook;
+}
+
+export interface WebhookDeliveryInsert {
+  id?: string;
+  webhook_id: string;
+  organization_id: string;
+  event_type: string;
+  payload: Record<string, unknown>;
+  attempts?: number;
+  max_attempts?: number;
+  status?: WebhookDeliveryStatus;
+  last_status_code?: number | null;
+  last_error?: string | null;
+  next_retry_at?: string | null;
+  delivered_at?: string | null;
+}
+
+export interface WebhookDeliveryUpdate {
+  attempts?: number;
+  status?: WebhookDeliveryStatus;
+  last_status_code?: number | null;
+  last_error?: string | null;
+  next_retry_at?: string | null;
+  delivered_at?: string | null;
+}
+
+// -----------------------------------------------------------------------------
+// Database Schema Map
+// -----------------------------------------------------------------------------
+
 export interface Database {
   public: {
     Tables: {
@@ -162,15 +431,40 @@ export interface Database {
         Insert: OrganizationInvitationInsert;
         Update: OrganizationInvitationUpdate;
       };
+      organization_sla_policies: {
+        Row: OrganizationSLAPolicy;
+        Insert: OrganizationSLAPolicyInsert;
+        Update: OrganizationSLAPolicyUpdate;
+      };
       tickets: {
         Row: Ticket;
-        Insert: Omit<Ticket, "id" | "created_at" | "updated_at">;
-        Update: Partial<Omit<Ticket, "id">>;
+        Insert: TicketInsert;
+        Update: Partial<TicketInsert>;
       };
       ticket_activities: {
         Row: TicketActivity;
         Insert: TicketActivityInsert;
         Update: Partial<TicketActivity>;
+      };
+      ticket_comments: {
+        Row: TicketComment;
+        Insert: TicketCommentInsert;
+        Update: TicketCommentUpdate;
+      };
+      notifications: {
+        Row: Notification;
+        Insert: NotificationInsert;
+        Update: NotificationUpdate;
+      };
+      organization_webhooks: {
+        Row: OrganizationWebhook;
+        Insert: OrganizationWebhookInsert;
+        Update: OrganizationWebhookUpdate;
+      };
+      webhook_deliveries: {
+        Row: WebhookDelivery;
+        Insert: WebhookDeliveryInsert;
+        Update: WebhookDeliveryUpdate;
       };
     };
   };
@@ -198,4 +492,3 @@ export type RealtimeTicketEvent = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   old: Record<string, any>;
 };
-
