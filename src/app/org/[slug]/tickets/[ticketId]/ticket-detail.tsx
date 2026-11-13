@@ -1,5 +1,9 @@
 "use client";
 
+import { useSWRConfig } from "swr";
+import type { WorkspaceData } from "@/lib/data/workspace";
+import { applySavedTicket } from "#workspace/saved-data";
+
 import {
   useWorkspaceDraft,
   useWorkspaceMutation,
@@ -102,6 +106,7 @@ export function TicketDetail({
   callerEmail = "",
   callerName = null,
 }: TicketDetailProps) {
+  const { mutate } = useSWRConfig();
   const router = useRouter();
   const deleteTicket = useWorkspaceMutation(deleteTicketAction);
 
@@ -166,12 +171,30 @@ export function TicketDetail({
   });
 
   const boundUpdateAction = useWorkspaceMutation(
-    updateTicketAction.bind(null, currentTicket.id, orgId, orgSlug),
+    async (previous: TicketActionState | null, data: FormData) => {
+      const result = await updateTicketAction(
+        currentTicket.id,
+        orgId,
+        orgSlug,
+        previous,
+        data,
+      );
+      if (result.ticket) {
+        const savedTicket = result.ticket;
+        await mutate(
+          () => true,
+          (current: WorkspaceData | undefined) =>
+            applySavedTicket(current, savedTicket),
+          { revalidate: false },
+        );
+      }
+      return result;
+    },
   );
   const [state, formAction, isUpdatePending] = useActionState(
     async (previous: TicketActionState | null, data: FormData) => {
       const result = await boundUpdateAction(previous, data);
-      if (result.success) {
+      if (result.ticket) {
         resetTitle();
         resetDescription();
         resetStatus();

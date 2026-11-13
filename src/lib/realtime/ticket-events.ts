@@ -41,7 +41,7 @@ export interface RealtimeTicketChangeEvent {
   old?: any;
 }
 
-function isOlderTicketEvent(current: TicketItem, incoming: { updated_at?: string }): boolean {
+export function isOlderTicketEvent(current: TicketItem, incoming: { updated_at?: string }): boolean {
   return Boolean(current.updated_at && incoming.updated_at &&
     Date.parse(incoming.updated_at) < Date.parse(current.updated_at));
 }

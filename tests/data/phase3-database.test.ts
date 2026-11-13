@@ -37,7 +37,15 @@ describe("Phase 3 transactional database behavior", () => {
       create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid$$;
       create function auth.jwt() returns jsonb language sql stable as $$select '{}'::jsonb$$;
       alter default privileges in schema public grant all on tables to authenticated, service_role;
-      create publication supabase_realtime;`);
+      create publication supabase_realtime;
+      create schema realtime;
+      grant usage on schema realtime to authenticated;
+      create table realtime.messages(topic text, extension text, event text, payload jsonb, private boolean);
+      alter table realtime.messages enable row level security;
+      grant select on realtime.messages to authenticated;
+      create function realtime.topic() returns text language sql stable as $$select current_setting('realtime.topic', true)$$;
+      create function realtime.send(payload jsonb, event text, topic text, private boolean) returns void language sql as
+        $$insert into realtime.messages values (topic, 'broadcast', event, payload, private)$$;`);
     for (const name of readdirSync(
       join(process.cwd(), "supabase/migrations"),
     ).sort()) {
@@ -58,6 +66,81 @@ describe("Phase 3 transactional database behavior", () => {
   });
   after(async () => {
     await db?.close();
+  });
+
+  it("sends private workspace change hints for all workspace tables", async () => {
+    const result = await db.query<{ table_name: string }>(`
+      select distinct payload->>'table' as table_name from realtime.messages
+      where topic='workspace:${org}' and private and event='workspace_changed'
+    `);
+    assert.ok(result.rows.some((row) => row.table_name === "organizations"));
+    assert.ok(
+      result.rows.some((row) => row.table_name === "organization_members"),
+    );
+    assert.ok(
+      result.rows.some((row) => row.table_name === "organization_sla_policies"),
+    );
+    assert.ok(
+      result.rows.some((row) => row.table_name === "organization_webhooks"),
+    );
+    assert.ok(result.rows.some((row) => row.table_name === "tickets"));
+    assert.equal(
+      await scalar(
+        `select count(*) from pg_trigger where tgname='workspace_realtime_changed' and not tgisinternal`,
+      ),
+      8,
+    );
+    assert.equal(
+      await scalar(
+        `select count(*) from realtime.messages where payload - 'table' <> '{}'::jsonb`,
+      ),
+      0,
+    );
+  });
+
+  it("authorizes workspace hints by membership and prevents client publishing", async () => {
+    await db.exec(
+      `set role authenticated; set request.jwt.claim.sub='${member}'; set realtime.topic='workspace:${org}';`,
+    );
+    try {
+      assert.ok((await scalar(`select count(*) from realtime.messages`)) > 0);
+      await db.exec(`set realtime.topic='workspace:${otherOrg}';`);
+      assert.equal(await scalar(`select count(*) from realtime.messages`), 0);
+      await assert.rejects(
+        db.exec(
+          `select realtime.send('{}','workspace_changed','workspace:${org}',true);`,
+        ),
+      );
+    } finally {
+      await db.exec(
+        "reset role; reset request.jwt.claim.sub; reset realtime.topic;",
+      );
+    }
+    const privilege = await db.query<{ allowed: boolean }>(
+      `select has_function_privilege('authenticated', 'public.notify_workspace_changed()', 'execute') as allowed`,
+    );
+    assert.equal(privilege.rows[0].allowed, false);
+  });
+
+  it("sends a private scoped hint when an invitation is deleted", async () => {
+    await db.exec(`insert into public.organization_invitations(organization_id,email,role,token,invited_by)
+      values ('${org}','delete-test@example.com','member','delete-test-token','${owner}');`);
+    await db.exec("delete from realtime.messages;");
+    await db.exec(
+      `delete from public.organization_invitations where token='delete-test-token';`,
+    );
+    const result = await db.query<{
+      topic: string;
+      payload: { table: string };
+      private: boolean;
+    }>("select topic,payload,private from realtime.messages");
+    assert.deepEqual(result.rows, [
+      {
+        topic: `workspace:${org}`,
+        payload: { table: "organization_invitations" },
+        private: true,
+      },
+    ]);
   });
 
   it("queues assignment notifications and a webhook atomically with ticket creation", async () => {

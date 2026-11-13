@@ -27,9 +27,9 @@ export async function updateSLAPolicyAction(
     .from("organization_sla_policies")
     .update(policy)
     .eq("organization_id", orgId)
-    .select("id")
+    .select("*")
     .maybeSingle();
   if (error || !data) return { error: "Unable to save SLA policy." };
   revalidatePath(`/org/${slug}/settings`);
-  return { success: true };
+  return { success: true, policy: data };
 }

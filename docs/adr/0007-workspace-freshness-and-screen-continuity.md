@@ -42,7 +42,7 @@ Inspection found that the ticket realtime hook initializes a local array from se
 
 Use SWR with a browser-memory cache owned by the authenticated user and organization. Existing workspace queries remain in the server data layer and are served through an authorized, private, uncached read endpoint. Screen components reuse their previous data during background reads, including after Next.js evicts a route. Each screen activation forces catch-up, including React Activity resumes within the normal request-deduplication window.
 
-Mutation callers await workspace revalidation after the server action. Ticket List reconciles incoming snapshots, and Board transitions roll back before authoritative revalidation. Realtime events, subscription recovery, browser focus, and reconnection trigger refreshes. Organization and SLA changes also refresh the shared layout.
+Confirmed ticket, organization, SLA policy, and webhook writes update the workspace cache from their server-returned records before revalidation. Draft baselines clear after the confirmed records are cached, preserving saved values when a follow-up read fails. Mutation callers await workspace revalidation after the server action. Ticket List reconciles incoming snapshots, and Board transitions roll back before authoritative revalidation. Private database Broadcast notifications cover organizations, members, invitations, SLA policies, webhooks, deliveries, tickets, and activities. Their payload contains the changed table name. A membership-scoped policy authorizes private workspace topics. Insert, update, and delete triggers emit the same invalidation hint. Realtime events, subscription recovery, browser focus, reconnection, and screen activation refresh both cached screens and the shared server layout, keeping organization names and SLA calculations current.
 
 Store working screen context and form drafts in workspace memory. Save the ticket view preference in browser storage using the user, organization, and screen as its scope. Valid explicit URL views take precedence. Field-level draft baselines let untouched fields follow background updates while retaining edited values. Successful submissions clear their draft baselines. Sign-out uses a full document navigation to release retained routes and all workspace memory.
 
@@ -50,6 +50,10 @@ SWR adds a dependency to centralize request ordering, deduplication, and mutatio
 
 ## Verification
 
-The repository test suite, type checking, lint, and production build pass. Nineteen production-browser checks passed against an isolated Supabase-compatible test service, including delayed reads, rejected writes, unavailable realtime delivery, rapid reconnect, and a second unsaved edit after a successful save.
+The repository test suite passes all 248 tests. Type checking, lint, and the production build pass. Twenty-seven production-browser checks passed against an isolated Supabase-compatible service, including delayed reads, rejected writes, unavailable realtime delivery, private Broadcast delivery, channel recovery, shared layout catch-up, and successful saves followed by failed reads for ticket, organization, SLA policy, and webhook forms.
 
-The automated regression tests cover ticket snapshot reconciliation, delayed realtime event ordering, concurrent rollback safety, scope isolation, preference resolution, working-context retention, and read authorization/error responses. Browser checks used a mocked service. Hosted Supabase authorization and websocket recovery were outside this verification environment.
+PostgreSQL/PGlite checks exercise the migration triggers, private-topic membership policy, restricted function privileges, and deletion notifications. Regression tests also cover saved-record cache reconciliation, stale response ordering, tenant isolation, ticket snapshot reconciliation, preferences, working-context retention, and read authorization/error responses. Browser transport checks use mocked WebSockets. Hosted Supabase authorization and websocket recovery remain outside this verification environment.
+
+## Deployment
+
+Apply `supabase/migrations/20261113174538_workspace_realtime_sync.sql` to hosted Supabase during deployment to activate private workspace notifications. Its policy and triggers use Supabase's native Realtime database functions.

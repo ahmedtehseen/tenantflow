@@ -355,3 +355,5 @@ export type SettingsData = NonNullable<
 >;
 
 export type DetailData = NonNullable<Awaited<ReturnType<typeof loadDetail>>>;
+
+export type WorkspaceData = OverviewData | TicketsData | MembersData | SettingsData | DetailData;

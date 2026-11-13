@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useSWRConfig } from "swr";
+import type { WorkspaceData } from "@/lib/data/workspace";
+import { applySavedPolicy, applySavedWebhook } from "#workspace/saved-data";
 import {
   useRefreshWorkspace,
   useWorkspaceState,
@@ -62,9 +64,14 @@ export function Phase3Settings({
   );
   const editing = webhooks.find((webhook) => webhook.id === editingId);
   const refresh = useRefreshWorkspace();
-  const router = useRouter();
+  const { mutate } = useSWRConfig();
   function run(
-    action: () => Promise<{ error?: string; success?: boolean }>,
+    action: () => Promise<{
+      error?: string;
+      success?: boolean;
+      policy?: OrganizationSLAPolicy;
+      webhook?: OrganizationWebhook;
+    }>,
     successMessage: string,
     draftPrefix?: string,
   ) {
@@ -76,13 +83,30 @@ export function Phase3Settings({
           setMessage("");
           return;
         }
+        if (result.policy) {
+          const savedPolicy = result.policy;
+          await mutate(
+            () => true,
+            (current: WorkspaceData | undefined) =>
+              applySavedPolicy(current, savedPolicy),
+            { revalidate: false },
+          );
+        }
+        if (result.webhook) {
+          const savedWebhook = result.webhook;
+          await mutate(
+            () => true,
+            (current: WorkspaceData | undefined) =>
+              applySavedWebhook(current, savedWebhook),
+            { revalidate: false },
+          );
+        }
         setError("");
         setMessage(successMessage);
         if (deleteId === editingId) setEditingId(null);
         setDeleteId(null);
         await refresh();
         if (draftPrefix) screenState.clear(draftPrefix);
-        router.refresh();
       } catch {
         setError("Unable to save changes. Try again.");
         setMessage("");

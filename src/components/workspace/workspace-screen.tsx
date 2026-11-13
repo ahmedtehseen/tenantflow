@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
-import { useWorkspace } from "./workspace-provider";
+import { useWorkspace, useRefreshWorkspace } from "./workspace-provider";
 
 class ScreenError extends Error {
   constructor(
@@ -36,14 +36,15 @@ export function WorkspaceScreen<Data>({
   const { userId, orgId, slug, state } = useWorkspace();
   const pathname = usePathname();
   const { unload } = useSWRConfig();
+  const refresh = useRefreshWorkspace();
   const url = `/org/${encodeURIComponent(slug)}/data/${screen}?user=${encodeURIComponent(userId)}&org=${encodeURIComponent(orgId)}`;
-  const { data, error, mutate } = useSWR<Data, ScreenError>(url, fetchScreen);
+  const { data, error } = useSWR<Data, ScreenError>(url, fetchScreen);
   const usable = data !== undefined && error?.status !== 410;
 
   useEffect(() => {
     // Activity resumes effects. Force catch-up even inside SWR's deduplication window.
-    void mutate().catch(() => undefined);
-  }, [mutate]);
+    void refresh();
+  }, [refresh]);
 
   useEffect(() => {
     if (error && [401, 403, 404].includes(error.status)) {
@@ -91,7 +92,7 @@ export function WorkspaceScreen<Data>({
           <button
             type="button"
             onClick={() => {
-              void mutate().catch(() => undefined);
+              void refresh();
             }}
             className="rounded-lg border px-3 py-1.5 font-medium"
           >

@@ -55,8 +55,12 @@ export function WorkspaceProvider({
 
 export function useRefreshWorkspace() {
   const { mutate } = useSWRConfig();
+  const router = useRouter();
   // Omitting the data argument retains each snapshot while revalidating it.
-  return useCallback(() => mutate(() => true).catch(() => undefined), [mutate]);
+  return useCallback(() => {
+    if (navigator.onLine !== false) router.refresh();
+    return mutate(() => true).catch(() => undefined);
+  }, [mutate, router]);
 }
 
 /** Revalidate after every mutation, including redirects and ambiguous network failures. */
@@ -112,7 +116,6 @@ export function useWorkspaceState<T>(
 }
 
 function WorkspaceSync() {
-  const router = useRouter();
   const { orgId, userId, state } = useWorkspace();
   const refresh = useRefreshWorkspace();
   const { unload } = useSWRConfig();
@@ -132,59 +135,20 @@ function WorkspaceSync() {
     window.addEventListener("online", scheduleRefresh);
     window.addEventListener("focus", scheduleRefresh);
     document.addEventListener("visibilitychange", onVisible);
-    const channel = supabase.channel(`workspace:${userId}:${orgId}`);
-    for (const table of [
-      "tickets",
-      "organization_members",
-      "organization_invitations",
-      "organization_webhooks",
-      "webhook_deliveries",
-      "ticket_activities",
-    ]) {
-      channel.on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table,
-          filter: `organization_id=eq.${orgId}`,
-        },
-        scheduleRefresh,
-      );
-    }
-    const refreshLayout = () => {
-      scheduleRefresh();
-      router.refresh();
-    };
-    channel.on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "organization_sla_policies",
-        filter: `organization_id=eq.${orgId}`,
-      },
-      refreshLayout,
-    );
-    channel.on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "organizations",
-        filter: `id=eq.${orgId}`,
-      },
-      refreshLayout,
-    );
-    // DELETE filters are unsupported by Postgres Changes. Refresh authorized snapshots only.
-    channel.on(
-      "postgres_changes",
-      { event: "DELETE", schema: "public", table: "tickets" },
-      scheduleRefresh,
-    );
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") scheduleRefresh();
+    const channel = supabase.channel(`workspace:${orgId}`, {
+      config: { private: true },
     });
+    channel.on("broadcast", { event: "workspace_changed" }, scheduleRefresh);
+    let disposed = false;
+    async function subscribe() {
+      await supabase.realtime.setAuth();
+      if (disposed) return;
+      channel.subscribe((status) => {
+        if (status === "SUBSCRIBED") scheduleRefresh();
+      });
+    }
+    // Focus, navigation, and reconnect continue to check authoritative data.
+    void subscribe().catch(scheduleRefresh);
 
     const { data: auth } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT" || (session && session.user.id !== userId)) {
@@ -196,6 +160,7 @@ function WorkspaceSync() {
       }
     });
     return () => {
+      disposed = true;
       clearTimeout(timer);
       window.removeEventListener("online", scheduleRefresh);
       window.removeEventListener("focus", scheduleRefresh);
@@ -203,7 +168,7 @@ function WorkspaceSync() {
       auth.subscription.unsubscribe();
       void supabase.removeChannel(channel);
     };
-  }, [orgId, userId, state, refresh, unload, router]);
+  }, [orgId, userId, state, refresh, unload]);
   return null;
 }
 

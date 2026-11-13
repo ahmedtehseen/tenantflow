@@ -1,5 +1,9 @@
 "use client";
 
+import { useSWRConfig } from "swr";
+import type { WorkspaceData } from "@/lib/data/workspace";
+import { applySavedOrganization } from "#workspace/saved-data";
+
 import {
   useWorkspaceDraft,
   useWorkspaceMutation,
@@ -33,6 +37,7 @@ interface SettingsFormsProps {
 const initialState: ActionState = {};
 
 export function SettingsForms({ org, callerRole }: SettingsFormsProps) {
+  const { mutate } = useSWRConfig();
   const [name, setName, resetName] = useWorkspaceDraft(
     "settings:name",
     org.name,
@@ -44,12 +49,31 @@ export function SettingsForms({ org, callerRole }: SettingsFormsProps) {
 
   // Bound actions
   const boundUpdateAction = useWorkspaceMutation(
-    updateOrganizationAction.bind(null, org.id, org.slug),
+    async (previous: ActionState | null, data: FormData) => {
+      const result = await updateOrganizationAction(
+        org.id,
+        org.slug,
+        previous,
+        data,
+      );
+      if (result.organization) {
+        const savedOrganization = result.organization;
+        await mutate(
+          () => true,
+          (current: WorkspaceData | undefined) =>
+            applySavedOrganization(current, savedOrganization),
+          { revalidate: false },
+        );
+      }
+      return result;
+    },
   );
   const [updateState, updateFormAction, isUpdatePending] = useActionState(
     async (previous: ActionState | null, data: FormData) => {
       const result = await boundUpdateAction(previous, data);
-      if (result.success) resetName();
+      if (result.organization) {
+        resetName();
+      }
       return result;
     },
     initialState,

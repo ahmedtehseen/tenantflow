@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getTenantContext, assertTenantScoping } from "@/lib/data/tenant";
+import { getTenantContext, assertTenantScoping, type TenantContext } from "@/lib/data/tenant";
 import {
   normalizeEmail,
   isValidEmail,
@@ -16,6 +16,7 @@ import type { OrgRole, InvitationRole } from "@/types/database";
 export interface ActionState {
   error?: string | null;
   success?: string | null;
+  organization?: TenantContext["currentOrg"];
 }
 
 const SLUG_REGEX = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -99,17 +100,19 @@ export async function updateOrganizationAction(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: organization, error } = await supabase
     .from("organizations")
     .update({ name })
-    .eq("id", orgId);
+    .eq("id", orgId)
+    .select("id,name,slug,created_by,created_at,updated_at")
+    .maybeSingle();
 
-  if (error) {
-    return { error: error.message || "Failed to update organization." };
+  if (error || !organization) {
+    return { error: error?.message || "Failed to update organization." };
   }
 
   revalidatePath(`/org/${orgSlug}`, "layout");
-  return { success: "Organization updated successfully." };
+  return { success: "Organization updated successfully.", organization };
 }
 
 /**
