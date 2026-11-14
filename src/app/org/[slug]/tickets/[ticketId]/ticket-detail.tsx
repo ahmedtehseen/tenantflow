@@ -322,7 +322,12 @@ export function TicketDetail({
       )}
 
       {/* Main Form */}
-      <form key={currentTicket.id} action={formAction}>
+      <form
+        key={currentTicket.id}
+        action={formAction}
+        // Drafts reconcile saved values. Native resets desynchronize controlled selects.
+        onReset={(event) => event.preventDefault()}
+      >
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Main ticket body (Left 2 cols) */}
           <div className="lg:col-span-2 space-y-6">
