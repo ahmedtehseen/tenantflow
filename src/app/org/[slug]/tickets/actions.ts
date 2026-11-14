@@ -18,11 +18,13 @@ import {
   evaluateStatusTransitionSLA,
   recalculateTicketSLA,
 } from "#sla/ticket-sla";
-import type { TicketStatus, TicketPriority } from "@/types/database";
+import type { Ticket, TicketStatus, TicketPriority } from "@/types/database";
 
 export interface TicketActionState {
   error?: string | null;
   success?: string | null;
+  ticketId?: string;
+  ticket?: Ticket;
 }
 
 const VALID_STATUSES: TicketStatus[] = [
@@ -173,7 +175,7 @@ export async function createTicketAction(
   scheduleWebhookDispatch(orgId);
   revalidatePath(`/org/${orgSlug}/tickets`);
   revalidatePath(`/org/${orgSlug}`);
-  redirect(`/org/${orgSlug}/tickets/${newTicket.id}`);
+  return { success: "Ticket created successfully.", ticketId: newTicket.id };
 }
 
 /**
@@ -295,7 +297,7 @@ export async function updateTicketAction(
     .eq("id", ticketId)
     .eq("organization_id", orgId)
     .eq("updated_at", ticket.updated_at)
-    .select("id")
+    .select("*")
     .maybeSingle();
 
   if (error || !savedTicket) {
@@ -321,7 +323,7 @@ export async function updateTicketAction(
   scheduleWebhookDispatch(orgId);
   revalidatePath(`/org/${orgSlug}/tickets/${ticketId}`);
   revalidatePath(`/org/${orgSlug}/tickets`);
-  return { success: "Ticket updated successfully." };
+  return { success: "Ticket updated successfully.", ticket: savedTicket };
 }
 
 /**

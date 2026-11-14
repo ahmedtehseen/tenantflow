@@ -1,5 +1,7 @@
 "use client";
 
+import { useWorkspaceMutation } from "@/components/workspace/workspace-provider";
+
 import { useState, useTransition } from "react";
 import {
   Mail,
@@ -38,6 +40,8 @@ export function PendingInvitationsList({
   callerRole,
   invitations,
 }: PendingInvitationsListProps) {
+  const revokeInvitation = useWorkspaceMutation(revokeInvitationAction);
+
   const [invitationToRevoke, setInvitationToRevoke] =
     useState<PendingInvitationItem | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -61,7 +65,7 @@ export function PendingInvitationsList({
     if (!invitationToRevoke) return;
     setError(null);
     startTransition(async () => {
-      const res = await revokeInvitationAction(
+      const res = await revokeInvitation(
         invitationToRevoke.id,
         orgId,
         orgSlug,

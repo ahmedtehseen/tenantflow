@@ -53,10 +53,10 @@ export async function saveWebhookAction(
           organization_id: orgId,
           secret: randomBytes(32).toString("hex"),
         });
-  const { data, error } = await query.select("id").maybeSingle();
+  const { data, error } = await query.select("*").maybeSingle();
   if (error || !data) return { error: "Unable to save webhook endpoint." };
   revalidatePath(`/org/${slug}/settings`);
-  return { success: true };
+  return { success: true, webhook: data };
 }
 
 export async function updateWebhookAction(

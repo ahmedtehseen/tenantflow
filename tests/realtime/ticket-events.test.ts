@@ -323,6 +323,18 @@ describe("Pure Realtime Event Reducer & Optimistic State Transitions", () => {
     });
   });
 
+  it("ignores delayed realtime updates older than the authoritative snapshot", () => {
+    const current = initialTickets.map((ticket) => ({ ...ticket, updated_at: "2026-11-13T10:00:00Z" }));
+    for (const eventType of ["INSERT", "UPDATE"]) {
+      const result = applyTicketRealtimeEvent(current, {
+        eventType,
+        new: { ...current[0], title: "Outdated", updated_at: "2026-11-13T09:00:00+00:00" },
+      }, memberMap);
+      assert.equal(result[0].title, current[0].title);
+      assert.equal(result[0].updated_at, current[0].updated_at);
+    }
+  });
+
   describe("revertOptimisticTicketStatus", () => {
     it("reverts ticket status back to previousStatus", () => {
       // Simulate optimistic state first
@@ -340,6 +352,14 @@ describe("Pure Realtime Event Reducer & Optimistic State Transitions", () => {
       assert.equal(reverted[0].id, "ticket-1");
       assert.equal(reverted[0].status, "open");
       assert.equal(optimisticTickets[0].status, "resolved", "must not mutate optimistic array");
+    });
+
+    it("preserves a newer server status when rolling back an optimistic transition", () => {
+      const concurrent = optimisticTicketStatusTransition(initialTickets, "ticket-1", "resolved");
+      const result = revertOptimisticTicketStatus(concurrent, "ticket-1", "open", "in_progress");
+      assert.equal(result[0].status, "resolved");
+      const pending = optimisticTicketStatusTransition(initialTickets, "ticket-1", "in_progress");
+      assert.equal(revertOptimisticTicketStatus(pending, "ticket-1", "open", "in_progress")[0].status, "open");
     });
 
     it("returns unchanged array if ticketId does not exist", () => {

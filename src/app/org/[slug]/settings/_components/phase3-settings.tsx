@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useSWRConfig } from "swr";
+import type { WorkspaceData } from "@/lib/data/workspace";
+import { applySavedPolicy, applySavedWebhook } from "#workspace/saved-data";
+import {
+  useRefreshWorkspace,
+  useWorkspaceState,
+  useWorkspace,
+} from "@/components/workspace/workspace-provider";
+import { DraftInput, DraftCheckbox } from "@/components/workspace/draft-input";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { SLA_TARGET_FIELDS } from "@/lib/sla/policy";
 import { updateSLAPolicyAction } from "../sla-actions";
@@ -44,17 +52,28 @@ export function Phase3Settings({
   canManage: boolean;
   children: React.ReactNode;
 }) {
-  const [tab, setTab] = useState("general");
+  const { state: screenState } = useWorkspace();
+  const [tab, setTab] = useWorkspaceState("settings:tab", "general");
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useWorkspaceState<string | null>(
+    "settings:webhook-edit",
+    null,
+  );
   const editing = webhooks.find((webhook) => webhook.id === editingId);
-  const router = useRouter();
+  const refresh = useRefreshWorkspace();
+  const { mutate } = useSWRConfig();
   function run(
-    action: () => Promise<{ error?: string; success?: boolean }>,
+    action: () => Promise<{
+      error?: string;
+      success?: boolean;
+      policy?: OrganizationSLAPolicy;
+      webhook?: OrganizationWebhook;
+    }>,
     successMessage: string,
+    draftPrefix?: string,
   ) {
     startTransition(async () => {
       try {
@@ -64,11 +83,30 @@ export function Phase3Settings({
           setMessage("");
           return;
         }
+        if (result.policy) {
+          const savedPolicy = result.policy;
+          await mutate(
+            () => true,
+            (current: WorkspaceData | undefined) =>
+              applySavedPolicy(current, savedPolicy),
+            { revalidate: false },
+          );
+        }
+        if (result.webhook) {
+          const savedWebhook = result.webhook;
+          await mutate(
+            () => true,
+            (current: WorkspaceData | undefined) =>
+              applySavedWebhook(current, savedWebhook),
+            { revalidate: false },
+          );
+        }
         setError("");
         setMessage(successMessage);
         if (deleteId === editingId) setEditingId(null);
         setDeleteId(null);
-        router.refresh();
+        await refresh();
+        if (draftPrefix) screenState.clear(draftPrefix);
       } catch {
         setError("Unable to save changes. Try again.");
         setMessage("");
@@ -132,13 +170,13 @@ export function Phase3Settings({
           </p>
         ) : (
           <form
-            key={policy.updated_at}
             onSubmit={(event) => {
               event.preventDefault();
               const data = new FormData(event.currentTarget);
               run(
                 () => updateSLAPolicyAction(slug, orgId, data),
                 "SLA policy saved.",
+                "settings:sla:",
               );
             }}
             className="mt-5 space-y-5"
@@ -150,31 +188,34 @@ export function Phase3Settings({
               <div className="grid gap-4 sm:grid-cols-3">
                 <label className="space-y-1 text-xs">
                   Timezone
-                  <input
+                  <DraftInput
                     name="timezone"
+                    draftKey="settings:sla:timezone"
                     required
-                    defaultValue={policy.timezone}
+                    serverValue={policy.timezone}
                     placeholder="Asia/Karachi"
                     className={inputClass}
                   />
                 </label>
                 <label className="space-y-1 text-xs">
                   Opens at
-                  <input
+                  <DraftInput
                     type="time"
                     name="business_start_time"
+                    draftKey="settings:sla:business_start_time"
                     required
-                    defaultValue={policy.business_start_time.slice(0, 5)}
+                    serverValue={policy.business_start_time.slice(0, 5)}
                     className={inputClass}
                   />
                 </label>
                 <label className="space-y-1 text-xs">
                   Closes at
-                  <input
+                  <DraftInput
                     type="time"
                     name="business_end_time"
+                    draftKey="settings:sla:business_end_time"
                     required
-                    defaultValue={policy.business_end_time.slice(0, 5)}
+                    serverValue={policy.business_end_time.slice(0, 5)}
                     className={inputClass}
                   />
                 </label>
@@ -190,11 +231,11 @@ export function Phase3Settings({
                         key={day}
                         className="flex items-center gap-2 text-xs"
                       >
-                        <input
-                          type="checkbox"
+                        <DraftCheckbox
+                          draftKey={`settings:sla:day:${index + 1}`}
                           name="business_days"
                           value={index + 1}
-                          defaultChecked={policy.business_days.includes(
+                          serverChecked={policy.business_days.includes(
                             index + 1,
                           )}
                         />
@@ -208,13 +249,14 @@ export function Phase3Settings({
                 {SLA_TARGET_FIELDS.map((field) => (
                   <label key={field} className="space-y-1 text-xs capitalize">
                     {field.replaceAll("_", " ")}
-                    <input
+                    <DraftInput
                       type="number"
                       min={1}
                       max={525600}
                       required
                       name={field}
-                      defaultValue={policy[field]}
+                      draftKey={`settings:sla:${field}`}
+                      serverValue={policy[field]}
                       className={inputClass}
                     />
                   </label>
@@ -272,6 +314,7 @@ export function Phase3Settings({
                     editingId
                       ? "Webhook endpoint saved."
                       : "Webhook endpoint created.",
+                    `settings:webhook:${editingId || "new"}:`,
                   );
                 }}
                 className="mt-4 space-y-4"
@@ -279,10 +322,11 @@ export function Phase3Settings({
                 <fieldset disabled={pending} className="space-y-4">
                   <label className="block space-y-1 text-xs">
                     HTTPS endpoint
-                    <input
+                    <DraftInput
                       type="url"
                       name="url"
-                      defaultValue={editing?.url || ""}
+                      draftKey={`settings:webhook:${editingId || "new"}:url`}
+                      serverValue={editing?.url || ""}
                       required
                       placeholder="https://example.com/webhooks/tenantflow"
                       className={inputClass}
@@ -290,9 +334,10 @@ export function Phase3Settings({
                   </label>
                   <label className="block space-y-1 text-xs">
                     Description
-                    <input
+                    <DraftInput
                       name="description"
-                      defaultValue={editing?.description || ""}
+                      draftKey={`settings:webhook:${editingId || "new"}:description`}
+                      serverValue={editing?.description || ""}
                       maxLength={200}
                       className={inputClass}
                     />
@@ -305,11 +350,11 @@ export function Phase3Settings({
                           key={event}
                           className="flex items-center gap-2 text-xs"
                         >
-                          <input
-                            type="checkbox"
+                          <DraftCheckbox
+                            draftKey={`settings:webhook:${editingId || "new"}:event:${event}`}
                             name="events"
                             value={event}
-                            defaultChecked={
+                            serverChecked={
                               editing ? editing.events.includes(event) : true
                             }
                           />

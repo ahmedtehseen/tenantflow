@@ -1,5 +1,14 @@
 "use client";
 
+import { useSWRConfig } from "swr";
+import type { WorkspaceData } from "@/lib/data/workspace";
+import { applySavedOrganization } from "#workspace/saved-data";
+
+import {
+  useWorkspaceDraft,
+  useWorkspaceMutation,
+} from "@/components/workspace/workspace-provider";
+
 import { useActionState, useState } from "react";
 import {
   Building2,
@@ -28,27 +37,50 @@ interface SettingsFormsProps {
 const initialState: ActionState = {};
 
 export function SettingsForms({ org, callerRole }: SettingsFormsProps) {
-  const [name, setName] = useState(org.name);
+  const { mutate } = useSWRConfig();
+  const [name, setName, resetName] = useWorkspaceDraft(
+    "settings:name",
+    org.name,
+  );
   const [confirmation, setConfirmation] = useState("");
 
   const canEdit = callerRole === "owner" || callerRole === "admin";
   const isOwner = callerRole === "owner";
 
   // Bound actions
-  const boundUpdateAction = updateOrganizationAction.bind(
-    null,
-    org.id,
-    org.slug,
+  const boundUpdateAction = useWorkspaceMutation(
+    async (previous: ActionState | null, data: FormData) => {
+      const result = await updateOrganizationAction(
+        org.id,
+        org.slug,
+        previous,
+        data,
+      );
+      if (result.organization) {
+        const savedOrganization = result.organization;
+        await mutate(
+          () => true,
+          (current: WorkspaceData | undefined) =>
+            applySavedOrganization(current, savedOrganization),
+          { revalidate: false },
+        );
+      }
+      return result;
+    },
   );
   const [updateState, updateFormAction, isUpdatePending] = useActionState(
-    boundUpdateAction,
+    async (previous: ActionState | null, data: FormData) => {
+      const result = await boundUpdateAction(previous, data);
+      if (result.organization) {
+        resetName();
+      }
+      return result;
+    },
     initialState,
   );
 
-  const boundDeleteAction = deleteOrganizationAction.bind(
-    null,
-    org.id,
-    org.slug,
+  const boundDeleteAction = useWorkspaceMutation(
+    deleteOrganizationAction.bind(null, org.id, org.slug),
   );
   const [deleteState, deleteFormAction, isDeletePending] = useActionState(
     boundDeleteAction,
@@ -152,7 +184,8 @@ export function SettingsForms({ org, callerRole }: SettingsFormsProps) {
             <h2 className="text-sm font-semibold">Danger Zone</h2>
           </div>
           <p className="text-xs text-zinc-600 dark:text-zinc-400 mb-4">
-            Deleting an organization permanently removes all memberships, tickets, and operational data. This action is irreversible.
+            Deleting an organization permanently removes all memberships,
+            tickets, and operational data. This action is irreversible.
           </p>
 
           {deleteState?.error && (
@@ -168,7 +201,11 @@ export function SettingsForms({ org, callerRole }: SettingsFormsProps) {
                 htmlFor="confirmation"
                 className="block text-xs font-medium text-zinc-700 dark:text-zinc-300"
               >
-                Type <span className="font-mono font-bold text-red-600 dark:text-red-400">{org.slug}</span> to confirm
+                Type{" "}
+                <span className="font-mono font-bold text-red-600 dark:text-red-400">
+                  {org.slug}
+                </span>{" "}
+                to confirm
               </label>
               <input
                 id="confirmation"
@@ -203,10 +240,10 @@ export function SettingsForms({ org, callerRole }: SettingsFormsProps) {
         </div>
       ) : (
         <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50 p-6 text-xs text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/50 dark:text-zinc-400">
-          Only organization owners can delete this tenant or access destruction controls.
+          Only organization owners can delete this tenant or access destruction
+          controls.
         </div>
       )}
     </div>
   );
 }
-

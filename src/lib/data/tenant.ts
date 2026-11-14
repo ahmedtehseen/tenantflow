@@ -19,6 +19,7 @@ export interface TenantOrgSummary {
   slug: string;
   created_by: string | null;
   created_at: string;
+  updated_at?: string;
   role: OrgRole;
 }
 
@@ -33,6 +34,7 @@ export interface TenantContext {
     slug: string;
     created_by: string | null;
     created_at: string;
+    updated_at?: string;
   };
   currentRole: OrgRole;
   organizations: TenantOrgSummary[];
@@ -81,7 +83,8 @@ export const getTenantContext = cache(
             name,
             slug,
             created_by,
-            created_at
+            created_at,
+            updated_at
           )
         `)
         .eq("user_id", user.id),
@@ -96,7 +99,7 @@ export const getTenantContext = cache(
 
     // Parse and flatten organizations list
     const organizations: TenantOrgSummary[] = userMemberships
-      .map((m) => {
+      .map((m): TenantOrgSummary | null => {
         const org = Array.isArray(m.organizations)
           ? m.organizations[0]
           : m.organizations;
@@ -107,6 +110,7 @@ export const getTenantContext = cache(
           slug: org.slug,
           created_by: org.created_by,
           created_at: org.created_at,
+          updated_at: org.updated_at,
           role: m.role as OrgRole,
         };
       })
@@ -127,6 +131,7 @@ export const getTenantContext = cache(
           slug: activeOrg.slug,
           created_by: activeOrg.created_by,
           created_at: activeOrg.created_at,
+          updated_at: activeOrg.updated_at,
         },
         currentRole: activeOrg.role,
         organizations,
@@ -139,7 +144,7 @@ export const getTenantContext = cache(
     const adminClient = createAdminClient();
     const { data: globalOrg } = await adminClient
       .from("organizations")
-      .select("id, name, slug, created_by, created_at, is_public_directory")
+      .select("id, name, slug, created_by, created_at, updated_at, is_public_directory")
       .eq("slug", slug)
       .maybeSingle();
 
@@ -162,6 +167,7 @@ export const getTenantContext = cache(
         slug: globalOrg.slug,
         created_by: globalOrg.created_by,
         created_at: globalOrg.created_at,
+        updated_at: globalOrg.updated_at,
       },
       currentRole: null as unknown as OrgRole,
       organizations,

@@ -11,6 +11,7 @@ export interface ConfirmModalProps {
   cancelText?: string;
   variant?: "danger" | "warning" | "default";
   isLoading?: boolean;
+  error?: string | null;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -23,6 +24,7 @@ export function ConfirmModal({
   cancelText = "Cancel",
   variant = "danger",
   isLoading = false,
+  error,
   onConfirm,
   onClose,
 }: ConfirmModalProps) {
@@ -114,6 +116,8 @@ export function ConfirmModal({
             </p>
           </div>
         </div>
+
+        {error && <p role="alert" className="mt-4 text-xs text-red-600 dark:text-red-400">{error}</p>}
 
         <div className="mt-6 flex items-center justify-end gap-2.5">
           <button

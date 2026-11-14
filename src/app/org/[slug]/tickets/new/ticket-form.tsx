@@ -1,7 +1,13 @@
 "use client";
 
+import {
+  useWorkspaceState,
+  useWorkspaceMutation,
+} from "@/components/workspace/workspace-provider";
+
 import { useActionState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Loader2, AlertCircle, ArrowLeft, Plus } from "lucide-react";
 import { Select } from "@/components/ui/select";
 import { createTicketAction, type TicketActionState } from "../actions";
@@ -20,9 +26,38 @@ export function CreateTicketForm({
   orgSlug,
   members,
 }: CreateTicketFormProps) {
-  const boundAction = createTicketAction.bind(null, orgId, orgSlug);
+  const router = useRouter();
+  const [title, setTitle] = useWorkspaceState("new-ticket:title", "");
+  const [description, setDescription] = useWorkspaceState(
+    "new-ticket:description",
+    "",
+  );
+  const [priority, setPriority] = useWorkspaceState(
+    "new-ticket:priority",
+    "medium",
+  );
+  const [status, setStatus] = useWorkspaceState("new-ticket:status", "open");
+  const [assignee, setAssignee] = useWorkspaceState("new-ticket:assignee", "");
+  const boundAction = useWorkspaceMutation(
+    createTicketAction.bind(null, orgId, orgSlug),
+  );
   const [state, formAction, isPending] = useActionState(
-    boundAction,
+    async (previous: TicketActionState | null, data: FormData) => {
+      try {
+        const result = await boundAction(previous, data);
+        if (result.ticketId) {
+          setTitle("");
+          setDescription("");
+          setPriority("medium");
+          setStatus("open");
+          setAssignee("");
+          router.push(`/org/${orgSlug}/tickets/${result.ticketId}`);
+        }
+        return result;
+      } catch {
+        return { error: "Unable to create ticket. Your draft has been kept." };
+      }
+    },
     initialState,
   );
 
@@ -46,6 +81,8 @@ export function CreateTicketForm({
         <input
           id="title"
           name="title"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
           type="text"
           required
           autoFocus
@@ -68,7 +105,8 @@ export function CreateTicketForm({
           <Select
             id="priority"
             name="priority"
-            defaultValue="medium"
+            value={priority}
+            onChange={(event) => setPriority(event.target.value)}
             containerClassName="w-full"
             className="w-full py-2"
           >
@@ -90,7 +128,8 @@ export function CreateTicketForm({
           <Select
             id="status"
             name="status"
-            defaultValue="open"
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
             containerClassName="w-full"
             className="w-full py-2"
           >
@@ -112,7 +151,8 @@ export function CreateTicketForm({
           <Select
             id="assigned_to"
             name="assigned_to"
-            defaultValue=""
+            value={assignee}
+            onChange={(event) => setAssignee(event.target.value)}
             containerClassName="w-full"
             className="w-full py-2"
           >
@@ -137,6 +177,8 @@ export function CreateTicketForm({
         <textarea
           id="description"
           name="description"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
           rows={5}
           placeholder="Detailed description of the issue, requirement, or operational task..."
           className="w-full rounded-lg border border-zinc-200 bg-white px-3.5 py-2.5 text-xs text-zinc-900 shadow-2xs outline-none transition placeholder:text-zinc-400 focus:border-indigo-600 focus:ring-1 focus:ring-indigo-600/20 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
@@ -174,4 +216,3 @@ export function CreateTicketForm({
     </form>
   );
 }
-

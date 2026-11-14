@@ -22,6 +22,7 @@ export interface TicketItem {
   created_by: string | null;
   assigned_to: string | null;
   created_at: string;
+  updated_at?: string;
   creator?: TicketMemberInfo | null;
   assignee?: TicketMemberInfo | null;
 }
@@ -38,6 +39,11 @@ export interface RealtimeTicketChangeEvent {
   new?: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   old?: any;
+}
+
+export function isOlderTicketEvent(current: TicketItem, incoming: { updated_at?: string }): boolean {
+  return Boolean(current.updated_at && incoming.updated_at &&
+    Date.parse(incoming.updated_at) < Date.parse(current.updated_at));
 }
 
 /**
@@ -77,6 +83,7 @@ export function applyTicketRealtimeEvent(
         created_by: raw.created_by ?? null,
         assigned_to: raw.assigned_to ?? null,
         created_at: raw.created_at,
+        updated_at: raw.updated_at,
         first_response_breached: raw.first_response_breached ?? false,
         resolution_breached: raw.resolution_breached ?? false,
         first_response_due_at: raw.first_response_due_at ?? null,
@@ -89,6 +96,7 @@ export function applyTicketRealtimeEvent(
 
       const existingIndex = currentTickets.findIndex((t) => t.id === formattedTicket.id);
       if (existingIndex !== -1) {
+        if (isOlderTicketEvent(currentTickets[existingIndex], raw)) return currentTickets;
         return currentTickets.map((t, idx) => (idx === existingIndex ? formattedTicket : t));
       }
 
@@ -102,7 +110,7 @@ export function applyTicketRealtimeEvent(
       }
 
       return currentTickets.map((ticket) => {
-        if (ticket.id !== raw.id) {
+        if (ticket.id !== raw.id || isOlderTicketEvent(ticket, raw)) {
           return ticket;
         }
 
@@ -166,10 +174,11 @@ export function optimisticTicketStatusTransition(
 export function revertOptimisticTicketStatus(
   currentTickets: TicketItem[],
   ticketId: string,
-  previousStatus: TicketStatus
+  previousStatus: TicketStatus,
+  expectedStatus?: TicketStatus
 ): TicketItem[] {
   return currentTickets.map((ticket) => {
-    if (ticket.id === ticketId) {
+    if (ticket.id === ticketId && (expectedStatus === undefined || ticket.status === expectedStatus)) {
       return {
         ...ticket,
         status: previousStatus,

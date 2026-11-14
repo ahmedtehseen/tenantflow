@@ -1,6 +1,7 @@
 import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 
 /**
  * Supabase client for Server Components, Server Functions and Route Handlers.
@@ -9,6 +10,8 @@ import { cookies } from "next/headers";
  * reads `cookies()`, so the caller must render inside a <Suspense> boundary.
  */
 export async function createClient() {
+  // Session initialization reads the clock as well as cookies. Keep it request-time.
+  await connection();
   const cookieStore = await cookies();
 
   return createServerClient(

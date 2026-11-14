@@ -24,7 +24,10 @@
     "#cron/authorization": "./src/lib/cron/authorization.ts",
     "#sla/policy": "./src/lib/sla/policy.ts",
     "#sla/indicator": "./src/lib/sla/indicator.ts",
-    "#webhooks/transport": "./src/lib/webhooks/transport.ts"
+    "#webhooks/transport": "./src/lib/webhooks/transport.ts",
+    "#workspace/screen-state": "./src/lib/workspace/screen-state.ts",
+    "#tickets/events": "./src/lib/realtime/ticket-events.ts",
+    "#workspace/saved-data": "./src/lib/workspace/saved-data.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -38,6 +41,7 @@
     "react-dom": "19.3.0",
     "react-markdown": "^10.1.0",
     "server-only": "^0.0.1",
+    "swr": "^2.5.1",
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {

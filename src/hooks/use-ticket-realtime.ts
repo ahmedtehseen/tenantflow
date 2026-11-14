@@ -25,6 +25,12 @@ export function useTicketRealtime({
 } {
   const [tickets, setTickets] = useState<TicketItem[]>(initialTickets);
 
+  // Refreshed authoritative snapshots must replace the initial local copy.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTickets(initialTickets);
+  }, [initialTickets, orgId]);
+
   // Keep memberMap in a ref so the event listener always uses the freshest member profiles
   // without tearing down and recreating the realtime subscription.
   const memberMapRef = useRef<Map<string, TicketMemberInfo>>(memberMap);
