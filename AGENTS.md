@@ -21,3 +21,7 @@ Canonical 5 labels (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-
 ### Domain docs
 
 Single-context (`GLOSSARY.md` + `docs/adr/`). See `docs/agents/domain.md`.
+
+### Code review
+
+When reviewing changes, read `CODING_STANDARDS.md`.
