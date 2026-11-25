@@ -19,12 +19,18 @@ import {
   recalculateTicketSLA,
 } from "#sla/ticket-sla";
 import type { Ticket, TicketStatus, TicketPriority } from "@/types/database";
+import {
+  isSameTicketVersion,
+  TICKET_VERSION_CONFLICT_MESSAGE,
+} from "#tickets/versioning";
 
 export interface TicketActionState {
   error?: string | null;
   success?: string | null;
   ticketId?: string;
   ticket?: Ticket;
+  /** True when the save was refused because the ticket changed since the form loaded. */
+  conflict?: boolean;
 }
 
 const VALID_STATUSES: TicketStatus[] = [
@@ -216,6 +222,17 @@ export async function updateTicketAction(
     return { error: "Ticket not found." };
   }
 
+  // Optimistic concurrency against the version the form was rendered from. The
+  // form submits every field, so saving stale values would silently revert a
+  // teammate's change. Callers that omit the field keep the previous behavior.
+  const expectedUpdatedAt = formData.get("expected_updated_at")?.toString();
+  if (
+    expectedUpdatedAt !== undefined &&
+    !isSameTicketVersion(expectedUpdatedAt, ticket.updated_at)
+  ) {
+    return { error: TICKET_VERSION_CONFLICT_MESSAGE, conflict: true };
+  }
+
   const editEval = canEditTicket(ticket, {
     id: user.id,
     role: context.currentRole,
@@ -300,12 +317,12 @@ export async function updateTicketAction(
     .select("*")
     .maybeSingle();
 
-  if (error || !savedTicket) {
-    return {
-      error:
-        error?.message ||
-        "Ticket changed while you were editing. Refresh and try again.",
-    };
+  if (error) {
+    return { error: error.message };
+  }
+  if (!savedTicket) {
+    // Another write landed between our read and this update.
+    return { error: TICKET_VERSION_CONFLICT_MESSAGE, conflict: true };
   }
 
   const activitiesToInsert = buildTicketDiffActivities({

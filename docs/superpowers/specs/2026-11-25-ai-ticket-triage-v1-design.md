@@ -70,7 +70,7 @@ A stage is only entered when the previous gate has evidence in `STATUS.md`. If q
 ### 4.3 Accept / edit / reject (review beta)
 
 - Accepting a priority suggestion calls a thin wrapper that builds the same `FormData` the edit form submits and calls **`updateTicketAction`**. That means RBAC (`canEditTicket`: owner, admin, author or assignee), SLA recalculation, `ticket_activities` diffing and webhooks are all unchanged.
-- **Stale-write protection (a gap to close first):** today `updateTicketAction` compares `updated_at` with a value it re-reads inside the same request, so it does not detect edits made after the user loaded the page. Acceptance must pass the proposal's `ticket_updated_at` as the expected version. If the ticket has changed since, the acceptance is refused and the user is offered a fresh proposal. This should be added as an optional `expected_updated_at` field on the existing action, which also benefits the normal edit form, not as an AI-only path.
+- **Stale-write protection:** `updateTicketAction` now accepts an optional `expected_updated_at` form field and refuses the save with `conflict: true` when the ticket has changed since that version (shipped with this PR for the normal edit form). Acceptance passes the proposal's `ticket_updated_at` as `expected_updated_at`, so accepting a suggestion made from an older version is refused and the user is offered a fresh proposal.
 - The summary is never written to `tickets.description`. Accepting it means storing it on the proposal row as `summary_accepted`, displayed alongside the ticket.
 - Every decision is recorded on the proposal row (reviewer, decision per field, final value, timestamp). The resulting priority change is also logged as the usual `priority_changed` activity, with the actor being the human reviewer.
 
@@ -176,8 +176,8 @@ The model output never feeds a permission decision.
 1. **Provider:** reuse Gemini (as in Streamwise) or another provider? This affects data-processing terms for tenant data.
 2. Should members be able to request proposals in review mode, or only users with `canEditTicket`?
 3. Are any real, consented tickets available to de-identify, or is v1 evaluated on synthetic fixtures only?
-4. Should the `expected_updated_at` stale-write fix ship on its own first, since it also affects today's edit form?
+4. ~~Should the stale-write fix ship on its own first?~~ Resolved 2026-11-25: owner asked to fix it now; it ships in this PR.
 
 ## 11. Related finding
 
-`package.json` pins `next` at **16.4.3**, the same version that `npm audit` flags in Streamwise (moderate, 16.0.0–16.4.4, fixed in 16.4.6). This is outside the triage scope, but should be patched in its own small PR.
+`package.json` pinned `next` at **16.4.3**, inside the moderate advisory range 16.0.0–16.4.4. Patched to 16.4.6 in this PR at the owner's request.

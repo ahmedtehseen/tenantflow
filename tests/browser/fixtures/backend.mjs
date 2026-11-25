@@ -126,6 +126,12 @@ http
         Object.assign(db.tickets[0], ticket());
         db.ticket_activities = [];
       }
+      // Simulates a teammate saving the ticket from another session.
+      if (change.concurrentEdit) {
+        Object.assign(db.tickets[0], change.concurrentEdit, {
+          updated_at: new Date().toISOString(),
+        });
+      }
       return send(res, 200, {
         tickets: db.tickets,
         activities: db.ticket_activities,

@@ -13,6 +13,7 @@
   "imports": {
     "#tickets/lifecycle": "./src/lib/tickets/lifecycle.ts",
     "#tickets/view-mode": "./src/lib/tickets/view-mode.ts",
+    "#tickets/versioning": "./src/lib/tickets/versioning.ts",
     "#data/scoping": "./src/lib/data/scoping.ts",
     "#invitations/utils": "./src/lib/invitations/invitation-utils.ts",
     "#sla/business-hours": "./src/lib/sla/business-hours.ts",
