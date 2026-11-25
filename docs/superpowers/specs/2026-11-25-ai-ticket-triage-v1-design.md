@@ -1,7 +1,7 @@
 # AI Ticket Triage v1 — Technical Design Specification
 
 **Date:** 2026-11-25
-**Status:** Draft for owner review (roadmap Week 5). No code or schema changes accompany this document.
+**Status:** Design approved by owner 2026-11-25 (roadmap Week 5); open questions resolved in §10. Implementation not started. No AI code or schema changes accompany this document.
 **Baseline:** `main` at `1d38607` (unchanged since the 2026-11-20 audit).
 **Scope:** A read-only, schema-validated **summary** and **suggested priority with rationale** for a single ticket. Later stages add human-reviewed acceptance through the existing ticket actions.
 
@@ -51,11 +51,11 @@ A stage is only entered when the previous gate has evidence in `STATUS.md`. If q
 
 ### 4.1 On-demand (review beta and later)
 
-1. User opens a ticket. The UI calls a new server action `requestTriageProposalAction(ticketId, orgId, orgSlug)`.
+1. A **triager** (see §6) opens a ticket. The UI calls a new server action `requestTriageProposalAction(ticketId, orgId, orgSlug)`. The action refuses anyone who is not a triager for this ticket.
 2. The action calls `getTenantContext(orgSlug)` and `assertTenantScoping(context, orgId)`, the same as `updateTicketAction`.
 3. It loads the ticket **with the user's RLS client** (`createClient()`), filtered by `id` and `organization_id`. If RLS hides the ticket, the action returns "not found", so the AI never sees data the caller cannot.
 4. It builds the model input from an **allow-list of fields only**: `title`, `description`, current `priority`, `status`, `created_at`, and the latest K comments' bodies (K = 5, each truncated). It never sends assignee identity, emails, profile names, other tickets, or organization settings.
-5. The provider is called with a deadline and the request's abort signal (the pattern from Streamwise PR #30). The output is parsed with Zod, and `suggestedPriority` is checked against the enum.
+5. The model is called through a small `TriageModel` interface (`propose(input, { signal }) → unknown`) whose v1 implementation calls **Gemini**, the provider Streamwise already uses. The rest of the feature depends only on the interface, so the provider can be swapped without touching permissions, persistence or UI. The call has a deadline and the request's abort signal (the pattern from Streamwise PR #30). The output is parsed with Zod, and `suggestedPriority` is checked against the enum.
 6. The proposal is persisted (§5) with `ticket_updated_at` = the ticket's `updated_at` at read time, then returned to the UI.
 
 ### 4.2 Shadow (background)
@@ -131,11 +131,19 @@ Notes:
 
 | Action | Who | Enforced by |
 | --- | --- | --- |
-| See a proposal (review mode) | Any org member who can read the ticket | RLS on proposals + ticket RLS |
-| Request a fresh proposal | Any org member who can read the ticket; rate-limited | Server action + tenant context + budget |
-| Accept/edit priority | Users allowed by `canEditTicket` | Existing `updateTicketAction` |
-| Accept/edit summary | Same as priority (`canEditTicket`) | New action, same check |
+| See a proposal (review mode) | Triagers for the ticket | RLS on proposals + ticket RLS, plus the triager check in the read path |
+| Request a fresh proposal | Triagers for the ticket; rate-limited | Server action + tenant context + triager check + budget |
+| Accept/edit/reject priority | Triagers for the ticket | Triager check, then the existing `updateTicketAction` (RBAC, FSM, SLA, `expected_updated_at`) |
+| Accept/edit/reject summary | Triagers for the ticket | New action, same triager check |
 | Turn `ai_triage_mode` on/off | Owner/admin | `organizations_update_admin` policy + server check |
+
+**Triager** (owner decision 2026-11-25: "agents and admins only, never the person who filed the ticket"). TenantFlow has no separate agent role, so this maps to:
+
+- the org's **owners and admins**, and
+- the ticket's **assignee** (the member working it),
+- **excluding the ticket's author** (`tickets.created_by`) in every case, including when the author is an owner or admin.
+
+A new pure function `canTriageTicket(ticket, actor)` in `src/lib/tickets/lifecycle.ts` implements this, with unit tests next to `canEditTicket`. Authors keep their normal edit rights through the ordinary form; they just never see or act on AI suggestions for their own tickets. A person must explicitly accept every suggestion; nothing is applied automatically.
 
 The model output never feeds a permission decision.
 
@@ -160,7 +168,7 @@ The model output never feeds a permission decision.
 
 ## 9. Evaluation design (Week 7)
 
-**Fixtures:** clearly labeled synthetic tickets, plus de-identified examples only with owner consent. The target is 60–100 tickets, covering every priority, short/vague tickets, long noisy tickets, non-English, injection attempts and duplicates of one incident. Labels: reference priority (owner-reviewed) and a list of key facts per ticket.
+**Fixtures:** clearly labeled **synthetic tickets only** for v1 (owner decision 2026-11-25). Real, consented, de-identified tickets are introduced with the January pilot (Week 11) under a separate data decision. The target is 60–100 tickets, covering every priority, short/vague tickets, long noisy tickets, non-English, injection attempts and duplicates of one incident. Labels: reference priority (owner-reviewed) and a list of key facts per ticket.
 
 **Metrics:**
 - Schema validity rate (target ≥ 99%).
@@ -171,11 +179,13 @@ The model output never feeds a permission decision.
 
 **Preselected thresholds (proposed, owner to confirm before running):** schema validity ≥ 99%; within-one-level priority ≥ 90%; exact priority ≥ 65%; over-prioritization ≤ 10%; summaries with an unsupported claim ≤ 5%; cross-tenant tests 100% pass. These are starting points chosen from risk, not industry benchmarks, and they will be revised only via `DECISIONS.md`.
 
-## 10. Open questions for the owner
+## 10. Owner decisions
 
-1. **Provider:** reuse Gemini (as in Streamwise) or another provider? This affects data-processing terms for tenant data.
-2. Should members be able to request proposals in review mode, or only users with `canEditTicket`?
-3. Are any real, consented tickets available to de-identify, or is v1 evaluated on synthetic fixtures only?
+All resolved by the owner on 2026-11-25:
+
+1. **Provider:** Gemini, the same as Streamwise, behind the `TriageModel` interface (§4.1) so it can be swapped later. Gemini's data-processing terms for tenant data must be reviewed before any real tickets are sent (before the January pilot).
+2. **Who can request a suggestion:** triagers only, meaning owners, admins and the assignee, never the ticket's author (§6). A person must accept every suggestion.
+3. **Data:** synthetic tickets only until the January pilot.
 4. ~~Should the stale-write fix ship on its own first?~~ Resolved 2026-11-25: owner asked to fix it now; it ships in this PR.
 
 ## 11. Related finding
