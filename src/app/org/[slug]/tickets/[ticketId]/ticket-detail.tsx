@@ -187,6 +187,10 @@ export function TicketDetail({
             applySavedTicket(current, savedTicket),
           { revalidate: false },
         );
+      } else if (result.conflict) {
+        // Load the teammate's version so untouched fields and the expected
+        // version catch up. Drafts keep the caller's edits for the retry.
+        void mutate(() => true).catch(() => undefined);
       }
       return result;
     },
@@ -328,6 +332,11 @@ export function TicketDetail({
         // Drafts reconcile saved values. Native resets desynchronize controlled selects.
         onReset={(event) => event.preventDefault()}
       >
+        <input
+          type="hidden"
+          name="expected_updated_at"
+          value={currentTicket.updated_at}
+        />
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Main ticket body (Left 2 cols) */}
           <div className="lg:col-span-2 space-y-6">

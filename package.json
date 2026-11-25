@@ -13,6 +13,7 @@
   "imports": {
     "#tickets/lifecycle": "./src/lib/tickets/lifecycle.ts",
     "#tickets/view-mode": "./src/lib/tickets/view-mode.ts",
+    "#tickets/versioning": "./src/lib/tickets/versioning.ts",
     "#data/scoping": "./src/lib/data/scoping.ts",
     "#invitations/utils": "./src/lib/invitations/invitation-utils.ts",
     "#sla/business-hours": "./src/lib/sla/business-hours.ts",
@@ -37,7 +38,7 @@
     "clsx": "^2.1.1",
     "ipaddr.js": "^2.5.0",
     "lucide-react": "^1.65.0",
-    "next": "16.4.3",
+    "next": "16.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-markdown": "^10.1.0",
@@ -53,7 +54,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
